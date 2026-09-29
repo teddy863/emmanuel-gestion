@@ -5,44 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Emmanuel — Flats à l'heure</title>
   <style>
-    :root {
-      --primary: #0E5C8C;
-      --secondary: #1E9E63;
-      --secondary-light: #E2F5EB;
-      --danger: #D9392B;
-      --danger-light: #FCE9E7;
-      --off: #8794A6;
-      --off-light: #EDF1F6;
-      --bg: #F3F6FA;
-      --ink: #12212E;
-      --muted: #5C6B7A;
-      --line: #DCE3EC;
-      --r: 18px;
-      --font: "Segoe UI", Roboto, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    body { font-family: var(--font); background: #DCE3EC; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .frame { width: 360px; height: 800px; background: var(--bg); display: flex; flex-direction: column; border-radius: 26px; box-shadow: 0 8px 22px rgba(18,33,46,.14); overflow: hidden; }
-    .topbar { background: var(--primary); color: #fff; min-height: 66px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
-    .tb-title { font-size: 19px; font-weight: 900; }
-    .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-    .rooms { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .room { border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 6px; text-align: center; }
-    .room.libre { background: var(--secondary-light); border: 2px solid #9AD9B8; color: #0F5C38; }
-    .room.occupee { background: var(--danger-light); border: 2px solid #F0A79E; color: #8E1F14; }
-    .room.hors_service { background: var(--off-light); border: 2px solid #C4D0DF; color: var(--off); pointer-events: none; }
-    .rname { font-size: 16px; font-weight: 900; }
-    .rstat { font-size: 11px; font-weight: 800; text-transform: uppercase; }
-    .field-mini { display: flex; flex-direction: column; gap: 2px; text-align: left; margin-top: 4px; }
-    .field-mini label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: var(--muted); }
-    .field-mini input { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); font-size: 12px; font-weight: 800; width: 100%; }
-    .btn-occuper { background: var(--secondary); color: #fff; border: 0; border-radius: 8px; padding: 6px; font-size: 11px; font-weight: 900; cursor: pointer; text-transform: uppercase; margin-top: 4px; width: 100%; }
-    .btn-liberer { background: var(--danger); color: #fff; border-radius: 8px; padding: 6px; font-size: 11px; font-weight: 900; text-decoration: none; margin-top: 4px; display: block; }
-    .btn { min-height: 52px; border: 0; border-radius: var(--r); font-size: 14px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; flex: 1; }
-    .btn-cloture { background: var(--secondary); color: #fff; }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; display: flex; gap: 10px; }
-  </style>
+  :root {
+    --bg-dark: #121A21;
+    --card-bg: #1C2732;
+    --primary: #0E5C8C;
+    --text: #FFFFFF;
+    --muted: #8E9BAE;
+    --line: #2A3847;
+  }
+  
+  /* Supression de toutes les marges et cadres smartphone artificiels */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  html, body {
+    width: 100vw;
+    min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto; /* Permet de défiler vers le bas normalement */
+  }
+
+  /* Conteneur fluide occupant 100% du téléphone */
+  .app-container {
+    width: 100%;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Les menus déroulants restent dans le cadre */
+  select, input {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+    background: #121A21;
+    color: #FFF;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 15px;
+  }
+</style>
 </head>
 <body>
   <div class="frame">

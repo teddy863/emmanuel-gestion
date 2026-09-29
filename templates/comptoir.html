@@ -5,45 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Emmanuel — Comptoir & Boissons</title>
   <style>
-    :root {
-      --primary: #0E5C8C;
-      --secondary: #1E9E63;
-      --danger: #D9392B;
-      --bg: #F3F6FA;
-      --ink: #12212E;
-      --muted: #5C6B7A;
-      --line: #DCE3EC;
-      --r: 18px;
-      --font: "Segoe UI", Roboto, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    body { font-family: var(--font); background: #DCE3EC; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .frame { width: 360px; height: 800px; background: var(--bg); display: flex; flex-direction: column; border-radius: 26px; box-shadow: 0 8px 22px rgba(18,33,46,.14); overflow: hidden; }
-    .topbar { background: var(--primary); color: #fff; min-height: 66px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
-    .tb-title { font-size: 19px; font-weight: 900; }
-    .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-    .card { background: #fff; border-radius: 14px; padding: 12px; border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(18,33,46,.08); display: flex; flex-direction: column; gap: 8px; }
-    .field { display: flex; flex-direction: column; gap: 2px; }
-    .field label { font-size: 10px; font-weight: 900; color: var(--muted); text-transform: uppercase; }
-    .field input { padding: 8px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; font-weight: 800; }
-    .btn-submit { background: var(--primary); color: #fff; border: 0; border-radius: 10px; padding: 10px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 12px; }
-    
-    /* VENTE BOUTEILLE PAR UN CLIC */
-    .grid-boissons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .btn-boisson { background: #fff; border: 2px solid var(--primary); border-radius: 14px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; cursor: pointer; text-align: center; color: var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,.05); }
-    .btn-boisson:active { background: #E2F5EB; border-color: var(--secondary); transform: scale(0.97); }
-    .btn-boisson.epuise { opacity: .5; pointer-events: none; border-color: var(--line); background: #F3F6FA; }
-    .b-nom { font-size: 14px; font-weight: 900; }
-    .b-prix { font-size: 15px; font-weight: 900; color: var(--primary); }
-    .b-stock { font-size: 11px; font-weight: 800; color: var(--secondary); }
+  :root {
+    --bg-dark: #121A21;
+    --card-bg: #1C2732;
+    --primary: #0E5C8C;
+    --text: #FFFFFF;
+    --muted: #8E9BAE;
+    --line: #2A3847;
+  }
+  
+  /* Supression de toutes les marges et cadres smartphone artificiels */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  html, body {
+    width: 100vw;
+    min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto; /* Permet de défiler vers le bas normalement */
+  }
 
-    .row-vente { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); }
+  /* Conteneur fluide occupant 100% du téléphone */
+  .app-container {
+    width: 100%;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
 
-    .btn { min-height: 52px; border: 0; border-radius: var(--r); font-size: 14px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; flex: 1; }
-    .btn-cloture { background: var(--secondary); color: #fff; }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; display: flex; gap: 10px; }
-  </style>
+  /* Les menus déroulants restent dans le cadre */
+  select, input {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+    background: #121A21;
+    color: #FFF;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 15px;
+  }
+</style>
 </head>
 <body>
   <div class="frame">

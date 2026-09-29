@@ -2,95 +2,166 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Emmanuel — Salle de Fête</title>
   <style>
     :root {
+      --bg-dark: #121A21;
+      --card-bg: #1C2732;
       --primary: #0E5C8C;
       --secondary: #1E9E63;
-      --secondary-light: #E2F5EB;
       --danger: #D9392B;
-      --warn: #E8862B;
-      --warn-light: #FDF0E2;
-      --bg: #F3F6FA;
-      --ink: #12212E;
-      --muted: #5C6B7A;
-      --line: #DCE3EC;
-      --r: 18px;
-      --font: "Segoe UI", Roboto, sans-serif;
+      --text: #FFFFFF;
+      --muted: #8E9BAE;
+      --line: #2A3847;
+      --r: 12px;
     }
-    * { box-sizing: border-box; }
-    body { font-family: var(--font); background: #DCE3EC; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .frame { width: 360px; height: 800px; background: var(--bg); display: flex; flex-direction: column; border-radius: 26px; box-shadow: 0 8px 22px rgba(18,33,46,.14); overflow: hidden; }
-    .topbar { background: var(--primary); color: #fff; min-height: 66px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
-    .tb-title { font-size: 19px; font-weight: 900; }
-    .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-    .card { background: #fff; border-radius: 14px; padding: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 8px rgba(18,33,46,.08); }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    html, body {
+      width: 100vw;
+      min-height: 100vh;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      background: #0A1118;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--r);
+      padding: 14px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
     .field { display: flex; flex-direction: column; gap: 4px; }
-    .field label { font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase; }
-    .field input { padding: 10px; border-radius: 10px; border: 2px solid var(--line); font-size: 14px; font-weight: 800; }
-    .btn-submit { background: var(--secondary); color: #fff; border: 0; border-radius: 12px; padding: 12px; font-weight: 900; cursor: pointer; text-transform: uppercase; }
-    .alert-error { background: #FCE9E7; color: var(--danger); padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 800; border: 1px solid #F0A79E; }
-    .btn-back { min-height: 52px; border: 0; border-radius: var(--r); font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; background: var(--primary); color: #fff; }
-    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; }
+    .field label { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+
+    select, input {
+      width: 100%;
+      padding: 12px;
+      background: #121A21;
+      color: #FFF;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .btn-submit {
+      background: var(--primary);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      height: 48px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .btn-back {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      color: #fff;
+      border-radius: 10px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-top: 10px;
+    }
+
+    .alert-error {
+      background: #3D1A1A;
+      border: 1px solid var(--danger);
+      color: #FF8888;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
-  <div class="frame">
-    <header class="topbar">
-      <div>
-        <div class="tb-title">Salle de Fête</div>
-        <div style="font-size: 12.5px; opacity: .85;">Réservations & Événements</div>
+
+  <header class="topbar">
+    <div style="font-size: 18px; font-weight: 900;">Salle de Fête</div>
+    <div style="font-size: 12px; color: var(--muted);">Réservations & Événements</div>
+  </header>
+
+  <main class="app-container">
+    {% if error %}
+      <div class="alert-error">{{ error }}</div>
+    {% endif %}
+
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Nouvelle Réservation</div>
+    
+    <form action="/salle/reserver" method="POST" class="card">
+      <div class="field">
+        <label>Nom du Client</label>
+        <input type="text" name="nom_client" required placeholder="ex: Kabeya Jean-Pierre">
       </div>
-    </header>
+      <div class="field">
+        <label>Téléphone</label>
+        <input type="text" name="telephone" required placeholder="+243 81 234 56 78">
+      </div>
+      <div class="field">
+        <label>Date de l'événement</label>
+        <input type="date" name="date_evenement" required>
+      </div>
+      <div class="field">
+        <label>Prix Total (FC)</label>
+        <input type="number" name="prix_total" required placeholder="1200000">
+      </div>
+      <div class="field">
+        <label>Acompte Versé (FC)</label>
+        <input type="number" name="acompte" required placeholder="600000">
+      </div>
+      <button type="submit" class="btn-submit">ENREGISTRER LA RÉSERVATION</button>
+    </form>
 
-    <div class="screen">
-      {% if error %}
-        <div class="alert-error">{{ error }}</div>
-      {% endif %}
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">Réservations Confirmées</div>
+    
+    {% for r in reservations %}
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; font-weight: 900;">
+          <span style="color: #64B5F6;">{{ r.nom_client }}</span>
+          <span style="color: var(--secondary);">{{ r.date_evenement }}</span>
+        </div>
+        <div style="font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 4px;">
+          Acompte: {{ "{:,.0f}".format(r.acompte).replace(',', ' ') }} FC · Reste: <b style="color: var(--danger);">{{ "{:,.0f}".format(r.solde).replace(',', ' ') }} FC</b>
+        </div>
+      </div>
+    {% else %}
+      <div class="card" style="text-align: center; color: var(--muted); font-size: 13px;">
+        Aucune réservation enregistrée.
+      </div>
+    {% endfor %}
 
-      <div style="font-size: 13px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Nouvelle Réservation</div>
-      <form action="/salle/reserver" method="POST" class="card">
-        <div class="field">
-          <label>Nom du Client</label>
-          <input type="text" name="nom_client" required placeholder="ex: Kabeya Jean-Pierre">
-        </div>
-        <div class="field">
-          <label>Téléphone</label>
-          <input type="text" name="telephone" required placeholder="+243 81 234 56 78">
-        </div>
-        <div class="field">
-          <label>Date de l'événement</label>
-          <input type="date" name="date_evenement" required>
-        </div>
-        <div class="field">
-          <label>Prix Total (FC)</label>
-          <input type="number" name="prix_total" required placeholder="1200000">
-        </div>
-        <div class="field">
-          <label>Acompte Versé (FC)</label>
-          <input type="number" name="acompte" required placeholder="600000">
-        </div>
-        <button type="submit" class="btn-submit">ENREGISTRER LA RÉSERVATION</button>
-      </form>
+    <a href="/dashboard" class="btn-back">RETOUR AU TABLEAU DE BORD</a>
+  </main>
 
-      <div style="font-size: 13px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">Réservations Confirmées</div>
-      {% for r in reservations %}
-        <div class="card">
-          <div style="display: flex; justify-content: space-between; font-weight: 900;">
-            <span style="color: var(--primary);">{{ r.nom_client }}</span>
-            <span style="color: var(--secondary);">{{ r.date_evenement }}</span>
-          </div>
-          <div style="font-size: 12px; color: var(--muted); font-weight: 700;">
-            Acompte: {{ "{:,.0f}".format(r.acompte).replace(',', ' ') }} FC · Reste: <b style="color: var(--danger);">{{ "{:,.0f}".format(r.solde).replace(',', ' ') }} FC</b>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-
-    <div class="actionbar">
-      <a href="/dashboard" class="btn-back">RETOUR AU TABLEAU DE BORD</a>
-    </div>
-  </div>
 </body>
 </html>

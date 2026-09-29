@@ -4,47 +4,50 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Emmanuel — Tableau de Bord</title>
-  <style>
-    :root {
-      --primary: #0E5C8C;
-      --secondary: #1E9E63;
-      --danger: #D9392B;
-      --bg: #121A21;
-      --card-bg: #1C2732;
-      --ink: #FFFFFF;
-      --muted: #8E9BAE;
-      --line: #2A3847;
-      --r: 14px;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: var(--font); background: var(--bg); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column; }
-    
-    .topbar { background: #0A1118; padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
-    .tb-title { font-size: 18px; font-weight: 900; }
-    .badge-status { background: #123D28; color: #32D785; font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 20px; border: 1px solid #1E9E63; }
-    
-    .container { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 600px; margin: 0 auto; }
-    
-    .hero { background: linear-gradient(145deg, #0E5C8C 0%, #073450 100%); border-radius: var(--r); padding: 18px; border: 1px solid #1B78B3; }
-    .hero-sub { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #A4D7F8; }
-    .hero-val { font-size: 32px; font-weight: 900; margin-top: 4px; color: #FFF; }
-    
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .mini-card { background: var(--card-bg); border-radius: 12px; padding: 12px; border: 1px solid var(--line); }
-    .mc-title { font-size: 10px; font-weight: 900; color: var(--muted); text-transform: uppercase; }
-    .mc-val { font-size: 16px; font-weight: 900; margin-top: 4px; color: #FFF; }
-    
-    .section-title { font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; margin-top: 6px; }
-    
-    .btn { min-height: 50px; border-radius: var(--r); font-size: 13px; font-weight: 900; border: 0; cursor: pointer; text-decoration: none; display: flex; align-items: center; justify-content: center; text-transform: uppercase; color: #fff; width: 100%; }
-    .btn-module { background: var(--card-bg); border: 1px solid var(--line); font-size: 13px; color: #E1E8F0; }
-    .btn-action { background: var(--primary); }
-    .btn-cloture { background: var(--secondary); }
-    .btn-danger { background: var(--danger); }
-    
-    .actionbar { position: sticky; bottom: 0; background: #0A1118; border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; width: 100%; max-width: 600px; margin: 0 auto; }
-  </style>
+ <style>
+  :root {
+    --bg-dark: #121A21;
+    --card-bg: #1C2732;
+    --primary: #0E5C8C;
+    --text: #FFFFFF;
+    --muted: #8E9BAE;
+    --line: #2A3847;
+  }
+  
+  /* Supression de toutes les marges et cadres smartphone artificiels */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  html, body {
+    width: 100vw;
+    min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto; /* Permet de défiler vers le bas normalement */
+  }
+
+  /* Conteneur fluide occupant 100% du téléphone */
+  .app-container {
+    width: 100%;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Les menus déroulants restent dans le cadre */
+  select, input {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+    background: #121A21;
+    color: #FFF;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 15px;
+  }
+</style>
 </head>
 <body>
 
