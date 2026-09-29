@@ -325,19 +325,30 @@ def ajouter_locataire(nom_complet: str = Form(...), local: str = Form(...), loye
     return RedirectResponse(url="/locataires", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- CLÔTURE DE CAISSE ---
+# --- CLÔTURE DE CAISSE & ARCHIVES ---
 @app.get("/cloture", response_class=HTMLResponse)
 def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    
+
     total_attendu = (
         sum(e["montant"] for e in DB_TOILETTES) + 
         sum(s["montant"] for s in DB_SEJOURS_FLATS) + 
         sum(v["montant"] for v in DB_VENTES_COMPTOIR) + 
         sum(v["montant"] for v in DB_CUISINE_VENTES)
     )
-    return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "message": None})
+
+    return templates.TemplateResponse(
+        request=request,
+        name="cloture.html", 
+        context={
+            "user": user, 
+            "total_attendu": total_attendu, 
+            "clotures": DB_CLOTURES,
+            "message": None
+        }
+    )
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
 def valider_cloture(request: Request, montant_compte: float = Form(...), session_token: Optional[str] = Cookie(None)):
@@ -345,26 +356,47 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
-    total_attendu = (
-        sum(e["montant"] for e in DB_TOILETTES) + 
-        sum(s["montant"] for s in DB_SEJOURS_FLATS) + 
-        sum(v["montant"] for v in DB_VENTES_COMPTOIR) + 
-        sum(v["montant"] for v in DB_CUISINE_VENTES)
-    )
+    total_toilettes = sum(e["montant"] for e in DB_TOILETTES)
+    total_flats = sum(s["montant"] for s in DB_SEJOURS_FLATS)
+    total_comptoir = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
+    total_cuisine = sum(v["montant"] for v in DB_CUISINE_VENTES)
 
+    total_attendu = total_toilettes + total_flats + total_comptoir + total_cuisine
     ecart = montant_compte - total_attendu
-    heure_actuelle = datetime.now().strftime("%H:%M:%S")
+    maintenant = datetime.now()
+    date_str = maintenant.strftime("%d/%m/%Y")
+    heure_str = maintenant.strftime("%H:%M:%S")
 
-    DB_CLOTURES.append({
+    # 1. Sauvegarde dans les archives de caisse
+    DB_CLOTURES.insert(0, {
         "id": str(uuid.uuid4()),
+        "date": date_str,
+        "heure": heure_str,
         "gerant": user["nom_complet"],
         "role_label": ROLES_LABELS.get(user["role"], user["role"]),
         "montant_attendu": total_attendu,
         "montant_compte": montant_compte,
         "ecart": ecart,
-        "heure_cloture": heure_actuelle
+        "detail": f"Toilettes: {total_toilettes:,.0f} FC | Flats: {total_flats:,.0f} FC | Comptoir: {total_comptoir:,.0f} FC | Cuisine: {total_cuisine:,.0f} FC"
     })
 
-    message_succes = f"Clôture enregistrée à {heure_actuelle} ! Écart : {ecart:,.0f} FC"
+    # 2. Réinitialisation des opérations de la journée
+    global DB_TOILETTES, DB_SEJOURS_FLATS, DB_VENTES_COMPTOIR, DB_CUISINE_VENTES, DB_CUISINE_DEPENSES
+    DB_TOILETTES = []
+    DB_SEJOURS_FLATS = []
+    DB_VENTES_COMPTOIR = []
+    DB_CUISINE_VENTES = []
+    DB_CUISINE_DEPENSES = []
 
-    return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "message": message_succes})
+    message_succes = f"Journée du {date_str} clôturée à {heure_str} ! Recette archivée ({montant_compte:,.0f} FC). La caisse du jour est remise à 0 FC."
+
+    return templates.TemplateResponse(
+        request=request,
+        name="cloture.html", 
+        context={
+            "user": user, 
+            "total_attendu": 0.0, 
+            "clotures": DB_CLOTURES,
+            "message": message_succes
+        }
+    )
