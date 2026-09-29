@@ -1,0 +1,15 @@
+{
+  "name": "Emmanuel Gestion",
+  "short_name": "Emmanuel",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#F3F6FA",
+  "theme_color": "#0E5C8C",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192x192/0E5C8C/FFFFFF?text=E",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emmanuel — Flats à l'heure</title>
+  <style>
+    :root {
+      --primary: #0E5C8C;
+      --secondary: #1E9E63;
+      --secondary-light: #E2F5EB;
+      --danger: #D9392B;
+      --danger-light: #FCE9E7;
+      --bg: #F3F6FA;
+      --ink: #12212E;
+      --muted: #5C6B7A;
+      --line: #DCE3EC;
+      --r: 18px;
+      --font: "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: var(--font); background: #DCE3EC; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .frame { width: 360px; height: 800px; background: var(--bg); display: flex; flex-direction: column; border-radius: 26px; box-shadow: 0 8px 22px rgba(18,33,46,.14); overflow: hidden; }
+    .topbar { background: var(--primary); color: #fff; min-height: 66px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
+    .tb-title { font-size: 19px; font-weight: 900; }
+    .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+    .rooms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    .room { border-radius: 16px; min-height: 100px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; text-align: center; }
+    .room.libre { background: var(--secondary-light); border: 2px solid #9AD9B8; color: #0F5C38; }
+    .room.occupee { background: var(--danger-light); border: 2px solid #F0A79E; color: #8E1F14; }
+    .rname { font-size: 15px; font-weight: 900; }
+    .rstat { font-size: 12px; font-weight: 800; }
+    .btn { min-height: 52px; border: 0; border-radius: var(--r); font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; background: var(--primary); color: #fff; }
+    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header class="topbar">
+      <div>
+        <div class="tb-title">Flats à l'heure</div>
+        <div style="font-size: 12.5px; opacity: .85;">Gestion de l'occupation</div>
+      </div>
+    </header>
+
+    <div class="screen">
+      <div style="font-size: 13px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Statut des Chambres</div>
+      <div class="rooms">
+        {% for ch in chambres %}
+          {% if ch.statut == 'libre' %}
+            <a href="/flats/occuper/{{ ch.id }}" class="room libre">
+              <div class="rname">{{ ch.nom }}</div>
+              <div class="rstat">LIBRE</div>
+              <div style="font-size: 10px;">{{ "{:,.0f}".format(ch.prix_par_heure).replace(',', ' ') }} FC/h</div>
+            </a>
+          {% else %}
+            <a href="/flats/liberer/{{ ch.id }}" class="room occupee">
+              <div class="rname">{{ ch.nom }}</div>
+              <div class="rstat">OCCUPÉE</div>
+              <div style="font-size: 10px;">Cliquer p/ Libérer</div>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="actionbar">
+      <a href="/dashboard" class="btn">RETOUR AU TABLEAU DE BORD</a>
+    </div>
+  </div>
+</body>
+</html>
