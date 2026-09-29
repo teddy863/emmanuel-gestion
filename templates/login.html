@@ -2,64 +2,47 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Emmanuel — Connexion</title>
   <style>
     :root {
       --primary: #0E5C8C;
-      --bg: #F3F6FA;
-      --ink: #12212E;
-      --muted: #5C6B7A;
-      --line: #DCE3EC;
-      --r: 18px;
-      --shadow-lg: 0 8px 22px rgba(18,33,46,.14);
-      --font: "Segoe UI", Roboto, sans-serif;
+      --bg: #121A21;
+      --card-bg: #1C2732;
+      --ink: #FFFFFF;
+      --muted: #8E9BAE;
+      --line: #2A3847;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    * { box-sizing: border-box; }
-    body { font-family: var(--font); background: #DCE3EC; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .frame { width: 360px; height: 800px; background: var(--bg); display: flex; flex-direction: column; border-radius: 26px; box-shadow: var(--shadow-lg); overflow: hidden; position: relative; }
-    .topbar { background: #fff; color: var(--ink); border-bottom: 2px solid var(--line); min-height: 56px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
-    .logo-sm { width: 40px; height: 40px; border-radius: 12px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 22px; }
-    .tb-title { font-size: 19px; font-weight: 900; }
-    .tb-sub { font-size: 12.5px; font-weight: 600; color: var(--muted); }
-    .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
-    .logo-big { width: 76px; height: 76px; border-radius: 24px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 900; }
-    .app-name { font-size: 30px; font-weight: 900; color: var(--primary); }
-    .lead { font-size: 18px; color: var(--muted); font-weight: 700; }
-    .dots { display: flex; gap: 14px; margin: 10px 0; }
-    .dots i { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 3px solid var(--line); display: block; }
-    .dots i.on { background: var(--primary); border-color: var(--primary); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; }
+    .login-card { width: 100%; max-width: 420px; background: var(--card-bg); border-radius: 16px; border: 1px solid var(--line); padding: 24px 18px; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    .avatar { width: 64px; height: 64px; background: var(--primary); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; }
+    .pin-dots { display: flex; gap: 12px; margin: 8px 0; }
+    .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
+    .dot.active { background: var(--primary); border-color: var(--primary); }
     .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
-    .key { height: 68px; border-radius: 18px; background: #fff; border: 2px solid var(--line); font-size: 28px; font-weight: 900; display: flex; align-items: center; justify-content: center; color: var(--ink); cursor: pointer; }
-    .key--fn { background: #EDF1F6; color: var(--muted); font-size: 16px; }
-    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .btn { min-height: 56px; border: 0; border-radius: var(--r); font-size: 17px; font-weight: 900; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; text-transform: uppercase; width: 100%; }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .error-msg { color: #D9392B; font-weight: 800; font-size: 14px; }
+    .key { background: #121A21; border: 1px solid var(--line); border-radius: 12px; height: 54px; font-size: 20px; font-weight: 800; color: #FFF; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .key:active { background: var(--primary); }
+    .btn-submit { background: var(--primary); color: #FFF; border: 0; border-radius: 12px; height: 50px; width: 100%; font-size: 14px; font-weight: 900; text-transform: uppercase; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div class="frame">
-    <header class="topbar">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span class="logo-sm">E</span>
-        <div>
-          <div class="tb-title">Emmanuel</div>
-          <div class="tb-sub">Gestion de l'établissement</div>
-        </div>
+  <div class="login-card">
+    <div class="avatar">E</div>
+    <h2 style="font-size: 22px; font-weight: 900;">Emmanuel</h2>
+    <p style="font-size: 13px; color: var(--muted);">Entrez votre code à 4 chiffres</p>
+    
+    <form action="/login" method="POST" style="width: 100%; display: flex; flex-direction: column; gap: 16px; align-items: center;">
+      <input type="hidden" name="pin" id="pin-input" required>
+      
+      <div class="pin-dots">
+        <div class="dot" id="d1"></div>
+        <div class="dot" id="d2"></div>
+        <div class="dot" id="d3"></div>
+        <div class="dot" id="d4"></div>
       </div>
-    </header>
-    <form class="screen" method="POST" action="/login" id="pinForm">
-      <div class="logo-big">E</div>
-      <div class="app-name">Emmanuel</div>
-      <div class="lead">Entrez votre code à 4 chiffres</div>
-      <input type="hidden" name="pin" id="pinInput" value="">
-      <div class="dots">
-        <i id="d1"></i><i id="d2"></i><i id="d3"></i><i id="d4"></i>
-      </div>
-      {% if error %}
-        <div class="error-msg">{{ error }}</div>
-      {% endif %}
+
       <div class="keypad">
         <div class="key" onclick="press('1')">1</div>
         <div class="key" onclick="press('2')">2</div>
@@ -70,28 +53,31 @@
         <div class="key" onclick="press('7')">7</div>
         <div class="key" onclick="press('8')">8</div>
         <div class="key" onclick="press('9')">9</div>
-        <div class="key key--fn" onclick="clearPin()">Effacer</div>
+        <div class="key" style="font-size: 12px;" onclick="clearPin()">Effacer</div>
         <div class="key" onclick="press('0')">0</div>
-        <div class="key key--fn" onclick="popPin()">⌫</div>
+        <div class="key" style="font-size: 14px;" onclick="backspace()">⌫</div>
       </div>
+
+      <button type="submit" class="btn-submit">OUVRIR LA SESSION</button>
     </form>
-    <div class="actionbar">
-      <button class="btn btn-primary" onclick="document.getElementById('pinForm').submit()">OUVRIR LA SESSION</button>
-    </div>
   </div>
+
   <script>
     let currentPin = "";
-    function updateDots() {
-      for(let i=1; i<=4; i++) {
-        document.getElementById('d' + i).className = (i <= currentPin.length) ? 'on' : '';
-      }
-      document.getElementById('pinInput').value = currentPin;
-    }
     function press(n) {
-      if(currentPin.length < 4) { currentPin += n; updateDots(); }
+      if (currentPin.length < 4) {
+        currentPin += n;
+        updateDots();
+      }
     }
     function clearPin() { currentPin = ""; updateDots(); }
-    function popPin() { currentPin = currentPin.slice(0, -1); updateDots(); }
+    function backspace() { currentPin = currentPin.slice(0, -1); updateDots(); }
+    function updateDots() {
+      document.getElementById('pin-input').value = currentPin;
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById('d' + i).classList.toggle('active', i <= currentPin.length);
+      }
+    }
   </script>
 </body>
 </html>
