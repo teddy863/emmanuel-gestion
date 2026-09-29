@@ -40,11 +40,11 @@
     
     <div class="grid-2">
       {% for ch in chambres %}
-        <div class="card-room {{ 'occupee' if ch.statut == 'occupee' else '' }}">
+        <div class="card-room {% if ch.statut == 'occupee' %}occupee{% endif %}">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 900; font-size: 15px;">{{ ch.nom }}</span>
-            <span style="font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; background: {{ '#D9392B' if ch.statut == 'occupee' else '#1E9E63' }}; color: #FFF;">
-              {{ ch.statut|upper }}
+            <span style="font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; background: {% if ch.statut == 'occupee' %}#D9392B{% else %}#1E9E63{% endif %}; color: #FFF;">
+              {% if ch.statut == 'occupee' %}OCCUPÉE{% elif ch.statut == 'libre' %}LIBRE{% else %}HORS SERVICE{% endif %}
             </span>
           </div>
 
