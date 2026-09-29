@@ -4,98 +4,173 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Emmanuel — Tableau de Bord</title>
- <style>
-  :root {
-    --bg-dark: #121A21;
-    --card-bg: #1C2732;
-    --primary: #0E5C8C;
-    --text: #FFFFFF;
-    --muted: #8E9BAE;
-    --line: #2A3847;
-  }
-  
-  /* Supression de toutes les marges et cadres smartphone artificiels */
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  
-  html, body {
-    width: 100vw;
-    min-height: 100vh;
-    background-color: var(--bg-dark);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow-x: hidden;
-    overflow-y: auto; /* Permet de défiler vers le bas normalement */
-  }
+  <style>
+    :root {
+      --primary: #0E5C8C;
+      --secondary: #1E9E63;
+      --danger: #D9392B;
+      --bg: #121A21;
+      --card-bg: #1C2732;
+      --ink: #FFFFFF;
+      --muted: #8E9BAE;
+      --line: #2A3847;
+      --r: 14px;
+    }
 
-  /* Conteneur fluide occupant 100% du téléphone */
-  .app-container {
-    width: 100%;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Les menus déroulants restent dans le cadre */
-  select, input {
-    width: 100%;
-    max-width: 100%;
-    padding: 12px;
-    background: #121A21;
-    color: #FFF;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    font-size: 15px;
-  }
-</style>
+    html, body {
+      width: 100%;
+      min-height: 100vh;
+      background-color: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      background: #0A1118;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tb-title { font-size: 18px; font-weight: 900; }
+    .tb-sub { font-size: 12px; color: var(--muted); }
+    .badge-status {
+      background: #123D28;
+      color: #32D785;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--secondary);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .hero {
+      background: linear-gradient(145deg, #0E5C8C 0%, #073450 100%);
+      border-radius: var(--r);
+      padding: 20px;
+      border: 1px solid #1B78B3;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    }
+    .hero-sub { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #A4D7F8; }
+    .hero-val { font-size: 32px; font-weight: 900; color: #FFF; margin-top: 6px; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .mini-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+    }
+    .mc-title { font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase; }
+    .mc-val { font-size: 17px; font-weight: 900; margin-top: 4px; color: #FFF; }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+      margin-top: 6px;
+    }
+
+    .btn {
+      width: 100%;
+      min-height: 52px;
+      border-radius: var(--r);
+      font-size: 13px;
+      font-weight: 900;
+      border: 0;
+      cursor: pointer;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-transform: uppercase;
+      color: #FFF;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+
+    .btn-action { background: var(--primary); border: 1px solid #1B78B3; }
+    .btn-module { background: var(--card-bg); border: 1px solid var(--line); color: #E1E8F0; }
+    .btn-cloture { background: var(--secondary); }
+    .btn-danger { background: var(--danger); }
+
+    .actionbar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+      padding-bottom: 24px;
+    }
+  </style>
 </head>
 <body>
 
   <header class="topbar">
     <div>
       <div class="tb-title">Tableau de bord</div>
-      <div style="font-size: 12px; color: var(--muted);">Super admin · Session active</div>
+      <div class="tb-sub">Super admin · Session active</div>
     </div>
     <div class="badge-status">● En ligne</div>
   </header>
 
   <main class="container">
-    
+
     <!-- Recette globale -->
     <div class="hero">
       <div class="hero-sub">Recette du Jour (Réseau)</div>
-      <div class="hero-val">{{ "{:,.0f}".format(recette_globale|default(610000)).replace(',', ' ') }} FC</div>
+      <div class="hero-val">{{ "{:,.0f}".format(recette_jour|default(610000)).replace(',', ' ') }} FC</div>
     </div>
 
-    <!-- Stats Rapides par Module -->
+    <!-- Mini stats par module -->
     <div class="grid-2">
       <div class="mini-card">
         <div class="mc-title">Toilettes</div>
-        <div class="mc-val">0 FC</div>
+        <div class="mc-val">{{ "{:,.0f}".format(total_toilettes|default(0)).replace(',', ' ') }} FC</div>
       </div>
       <div class="mini-card">
         <div class="mc-title">Flats</div>
-        <div class="mc-val">10 000 FC</div>
+        <div class="mc-val">{{ "{:,.0f}".format(total_flats|default(10000)).replace(',', ' ') }} FC</div>
       </div>
       <div class="mini-card">
         <div class="mc-title">Comptoir</div>
-        <div class="mc-val">0 FC</div>
+        <div class="mc-val">{{ "{:,.0f}".format(total_comptoir|default(0)).replace(',', ' ') }} FC</div>
       </div>
       <div class="mini-card">
         <div class="mc-title">Cuisine</div>
-        <div class="mc-val">0 FC</div>
+        <div class="mc-val">{{ "{:,.0f}".format(total_cuisine|default(0)).replace(',', ' ') }} FC</div>
       </div>
     </div>
 
-    <!-- Gestion Multi-Établissements & Gérants -->
-    <div class="section-title">ADMINISTRATION SYSTEME</div>
-    
+    <!-- Administration -->
+    <div class="section-title">ADMINISTRATION SYSTÈME</div>
     <div style="display: flex; flex-direction: column; gap: 10px;">
-      <a href="/gerants" class="btn btn-action" style="background: #1B78B3;">👤 GÉRER LES GÉRANTS & POSTES</a>
+      <a href="/gerants" class="btn btn-action">👤 GÉRER LES GÉRANTS & POSTES</a>
       <a href="/etablissements" class="btn btn-module">🏢 ÉTABLISSEMENT (BANDAL / TCHANGU)</a>
     </div>
 
-    <!-- Accès Directs aux Modules -->
+    <!-- Accès aux 6 Modules -->
     <div class="section-title">ACCÈS AUX MODULES</div>
     <div class="grid-2">
       <a href="/toilettes" class="btn btn-module">🚻 Toilettes</a>
@@ -106,12 +181,13 @@
       <a href="/locataires" class="btn btn-module">🔑 Locataires</a>
     </div>
 
-  </main>
+    <!-- Pied de page -->
+    <div class="actionbar">
+      <a href="/cloture" class="btn btn-cloture">CLÔTURE CAISSE</a>
+      <a href="/logout" class="btn btn-danger">QUITTER</a>
+    </div>
 
-  <footer class="actionbar">
-    <a href="/cloture" class="btn btn-cloture">CLÔTURE CAISSE</a>
-    <a href="/logout" class="btn btn-danger">QUITTER</a>
-  </footer>
+  </main>
 
 </body>
 </html>
