@@ -2,119 +2,81 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Emmanuel — Cuisine</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Emmanuel — Cuisine & Restaurant</title>
   <style>
-  :root {
-    --bg-dark: #121A21;
-    --card-bg: #1C2732;
-    --primary: #0E5C8C;
-    --text: #FFFFFF;
-    --muted: #8E9BAE;
-    --line: #2A3847;
-  }
-  
-  /* Supression de toutes les marges et cadres smartphone artificiels */
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  
-  html, body {
-    width: 100vw;
-    min-height: 100vh;
-    background-color: var(--bg-dark);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow-x: hidden;
-    overflow-y: auto; /* Permet de défiler vers le bas normalement */
-  }
-
-  /* Conteneur fluide occupant 100% du téléphone */
-  .app-container {
-    width: 100%;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  /* Les menus déroulants restent dans le cadre */
-  select, input {
-    width: 100%;
-    max-width: 100%;
-    padding: 12px;
-    background: #121A21;
-    color: #FFF;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    font-size: 15px;
-  }
-</style>
+    :root {
+      --bg-dark: #121A21;
+      --card-bg: #1C2732;
+      --primary: #0E5C8C;
+      --secondary: #1E9E63;
+      --danger: #D9392B;
+      --text: #FFFFFF;
+      --muted: #8E9BAE;
+      --line: #2A3847;
+      --r: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100vw; min-height: 100vh; background: var(--bg-dark); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; overflow-y: auto; }
+    .topbar { background: #0A1118; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .hero { background: linear-gradient(145deg, #0E5C8C 0%, #073450 100%); border-radius: var(--r); padding: 18px; border: 1px solid #1B78B3; }
+    .card { background: var(--card-bg); border-radius: var(--r); padding: 14px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    input { width: 100%; padding: 10px; background: #121A21; color: #FFF; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+    .btn-submit { background: var(--secondary); color: #FFF; border: 0; border-radius: 8px; height: 42px; font-weight: 900; font-size: 12px; cursor: pointer; text-transform: uppercase; width: 100%; }
+    .btn-nav { height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 900; text-transform: uppercase; color: #fff; width: 100%; }
+  </style>
 </head>
 <body>
-  <div class="frame">
-    <header class="topbar">
+  <header class="topbar">
+    <div style="font-size: 18px; font-weight: 900;">Cuisine & Restaurant</div>
+    <div style="font-size: 12px; color: var(--muted);">Session : {{ user.nom_complet }}</div>
+  </header>
+
+  <main class="container">
+    <div class="hero">
+      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #A4D7F8;">Recette Ventes Plats</div>
+      <div style="font-size: 28px; font-weight: 900; color: #FFF; margin-top: 4px;">{{ "{:,.0f}".format(total_ventes|default(0)).replace(',', ' ') }} FC</div>
+      <div style="font-size: 11px; color: #FF8888; margin-top: 2px;">Dépenses totales : {{ "{:,.0f}".format(total_depenses|default(0)).replace(',', ' ') }} FC</div>
+    </div>
+
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Servir un Plat / Combinaison</div>
+    <form action="/cuisine/vendre" method="POST" class="card">
       <div>
-        <div class="tb-title">Cuisine & Restaurant</div>
-        <div style="font-size: 12.5px; opacity: .85;">Session : {{ user.nom_complet }}</div>
+        <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Description du plat ou Combinaison</label>
+        <input type="text" name="description_plat" required placeholder="ex: Riz + Poulet + Pondu">
       </div>
-    </header>
-
-    <div class="screen">
-      <div class="hero">
-        <div style="font-size: 11px; font-weight: 800; text-transform: uppercase;">Recette Ventes Plats</div>
-        <div style="font-size: 26px; font-weight: 900;">{{ "{:,.0f}".format(total_ventes).replace(',', ' ') }} FC</div>
-        <div style="font-size: 12px; margin-top: 2px;">Dépenses totales : <b style="color: #FFB4B0;">{{ "{:,.0f}".format(total_depenses).replace(',', ' ') }} FC</b></div>
+      <div class="grid-2">
+        <div>
+          <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Prix (FC)</label>
+          <input type="number" name="prix_vente" value="5000" required>
+        </div>
+        <div>
+          <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Nombre de plats</label>
+          <input type="number" name="quantite" value="1" required>
+        </div>
       </div>
+      <button type="submit" class="btn-submit">Enregistrer la Vente</button>
+    </form>
 
-      <!-- 1. ENREGISTRER UNE VENTE (PLAT SIMPLE OU COMBINAISON) -->
-      <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Servir un Plat / Combinaison</div>
-      <form action="/cuisine/vendre" method="POST" class="card">
-        <div class="field">
-          <label>Description du plat ou Combinaison</label>
-          <input type="text" name="description_plat" required placeholder="ex: Riz + Poulet + Pondu">
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-          <div class="field">
-            <label>Prix (FC)</label>
-            <input type="number" name="prix_vente" required placeholder="5000">
-          </div>
-          <div class="field">
-            <label>Nombre de plats</label>
-            <input type="number" name="quantite" value="1" min="1" required>
-          </div>
-        </div>
-        <button type="submit" class="btn-submit">ENREGISTRER LA VENTE</button>
-      </form>
-
-      <!-- 2. ENREGISTRER PLUSIEURS DÉPENSES -->
-      <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 4px;">2. Enregistrer une Dépense Cuisine</div>
-      <form action="/cuisine/depense" method="POST" class="card">
-        <div class="field">
-          <label>Motif de la dépense</label>
-          <input type="text" name="description" required placeholder="ex: Achat d'huile, charbon, épices...">
-        </div>
-        <div class="field">
-          <label>Montant dépensé (FC)</label>
-          <input type="number" name="montant" required placeholder="15000">
-        </div>
-        <button type="submit" class="btn-depense">AJOUTER CETTE DÉPENSE</button>
-      </form>
-
-      <!-- HISTORIQUE DES DÉPENSES ENREGISTRÉES -->
-      <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 4px;">Historique des Dépenses de la Journée</div>
-      <div style="display: flex; flex-direction: column; gap: 4px;">
-        {% for d in depenses[::-1] %}
-          <div class="row-item">
-            <span>{{ d.description }}</span>
-            <b style="color: var(--danger);">- {{ "{:,.0f}".format(d.montant).replace(',', ' ') }} FC</b>
-          </div>
-        {% endfor %}
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">2. Enregistrer une Dépense Cuisine</div>
+    <form action="/cuisine/depense" method="POST" class="card">
+      <div>
+        <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Motif de la dépense</label>
+        <input type="text" name="description" required placeholder="ex: Achat d'huile, charbon, épices...">
       </div>
+      <div>
+        <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Montant Dépensé (FC)</label>
+        <input type="number" name="montant" value="15000" required>
+      </div>
+      <button type="submit" class="btn-submit" style="background: var(--danger);">Ajouter cette Dépense</button>
+    </form>
+
+    <div class="grid-2" style="margin-top: 10px;">
+      <a href="/cloture" class="btn-nav" style="background: var(--secondary);">Clôture Caisse</a>
+      <a href="/logout" class="btn-nav" style="background: var(--danger);">Déconnexion</a>
     </div>
-
-    <div class="actionbar">
-      <a href="/cloture" class="btn btn-cloture">CLÔTURE CAISSE</a>
-      <a href="/logout" class="btn btn-danger">DÉCONNEXION</a>
-    </div>
-  </div>
+  </main>
 </body>
 </html>
