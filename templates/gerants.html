@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emmanuel — Gestion des Gérants</title>
+  <style>
+    :root {
+      --primary: #0E5C8C;
+      --secondary: #1E9E63;
+      --danger: #D9392B;
+      --bg: #F3F6FA;
+      --ink: #12212E;
+      --muted: #5C6B7A;
+      --line: #DCE3EC;
+      --r: 18px;
+      --font: "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: var(--font); background: #DCE3EC; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .frame { width: 380px; height: 820px; background: var(--bg); display: flex; flex-direction: column; border-radius: 26px; box-shadow: 0 8px 22px rgba(18,33,46,.14); overflow: hidden; }
+    .topbar { background: var(--primary); color: #fff; min-height: 66px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+    .tb-title { font-size: 18px; font-weight: 900; }
+    .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+    .card { background: #fff; border-radius: 14px; padding: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 8px rgba(18,33,46,.08); }
+    .field { display: flex; flex-direction: column; gap: 2px; }
+    .field label { font-size: 10px; font-weight: 900; color: var(--muted); text-transform: uppercase; }
+    .field input, .field select { padding: 8px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; font-weight: 800; }
+    .btn-submit { background: var(--primary); color: #fff; border: 0; border-radius: 10px; padding: 10px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 12px; }
+    .row { display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid var(--line); }
+    .pin-display { background: #E2F5EB; border: 2px solid #9AD9B8; color: #0F5C38; padding: 10px; border-radius: 12px; text-align: center; font-weight: 900; font-size: 13px; }
+    .btn-back { min-height: 52px; border: 0; border-radius: var(--r); font-size: 14px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; background: var(--primary); color: #fff; }
+    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header class="topbar">
+      <div>
+        <div class="tb-title">Gérants & Postes</div>
+        <div style="font-size: 12px; opacity: .85;">Affectation par Établissement</div>
+      </div>
+    </header>
+
+    <div class="screen">
+      {% if nouveau_pin %}
+        <div class="pin-display">
+          Compte Gérant créé avec succès !<br>
+          Code PIN attribué : <span style="font-size: 22px;">{{ nouveau_pin }}</span>
+        </div>
+      {% endif %}
+
+      <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Affecter un Gérant à un Site</div>
+      <form action="/gerants/creer" method="POST" class="card">
+        <div class="field">
+          <label>Nom complet du gérant</label>
+          <input type="text" name="nom_complet" required placeholder="ex: Jeanne M.">
+        </div>
+        <div class="field">
+          <label>Établissement (Site)</label>
+          <select name="etablissement_id" required>
+            {% for site in etablissements %}
+              <option value="{{ site.id }}">{{ site.nom }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Poste / Rôle affecté</label>
+          <select name="role" required>
+            <option value="gerant_toilettes">Gérant Toilettes</option>
+            <option value="gerant_flats">Gérant Flats</option>
+            <option value="gerant_comptoir">Gérant Comptoir</option>
+            <option value="cuisinier">Cuisinier / Restaurant</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-submit">GÉNÉRER LE COMPTE & PIN</button>
+      </form>
+
+      <div style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Comptes Gérants Enregistrés</div>
+      {% for g in gerants %}
+        <div class="row">
+          <div>
+            <div style="font-weight: 900; font-size: 13px;">{{ g.nom_complet }}</div>
+            <div style="font-size: 11px; color: var(--muted);">{{ g.role_label }} · PIN: <b>{{ g.pin }}</b></div>
+            <div style="font-size: 10px; color: var(--primary); font-weight: 800;">Site : {{ g.etablissement_nom }}</div>
+          </div>
+          {% if g.role != 'super_admin' %}
+            <a href="/gerants/supprimer/{{ g.id }}" style="font-size: 10px; color: var(--danger); font-weight: 900; text-decoration: none;" onclick="return confirm('Supprimer ce gérant ?');">SUPPRIMER</a>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="actionbar">
+      <a href="/dashboard" class="btn-back">RETOUR TABLEAU DE BORD</a>
+    </div>
+  </div>
+</body>
+</html>

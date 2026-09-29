@@ -11,6 +11,8 @@
       --secondary-light: #E2F5EB;
       --danger: #D9392B;
       --danger-light: #FCE9E7;
+      --off: #8794A6;
+      --off-light: #EDF1F6;
       --bg: #F3F6FA;
       --ink: #12212E;
       --muted: #5C6B7A;
@@ -24,14 +26,22 @@
     .topbar { background: var(--primary); color: #fff; min-height: 66px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
     .tb-title { font-size: 19px; font-weight: 900; }
     .screen { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-    .rooms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
-    .room { border-radius: 16px; min-height: 100px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; text-align: center; }
+    .rooms { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .room { border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 6px; text-align: center; }
     .room.libre { background: var(--secondary-light); border: 2px solid #9AD9B8; color: #0F5C38; }
     .room.occupee { background: var(--danger-light); border: 2px solid #F0A79E; color: #8E1F14; }
-    .rname { font-size: 15px; font-weight: 900; }
-    .rstat { font-size: 12px; font-weight: 800; }
-    .btn { min-height: 52px; border: 0; border-radius: var(--r); font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; background: var(--primary); color: #fff; }
-    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; }
+    .room.hors_service { background: var(--off-light); border: 2px solid #C4D0DF; color: var(--off); pointer-events: none; }
+    .rname { font-size: 16px; font-weight: 900; }
+    .rstat { font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .field-mini { display: flex; flex-direction: column; gap: 2px; text-align: left; margin-top: 4px; }
+    .field-mini label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: var(--muted); }
+    .field-mini input { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); font-size: 12px; font-weight: 800; width: 100%; }
+    .btn-occuper { background: var(--secondary); color: #fff; border: 0; border-radius: 8px; padding: 6px; font-size: 11px; font-weight: 900; cursor: pointer; text-transform: uppercase; margin-top: 4px; width: 100%; }
+    .btn-liberer { background: var(--danger); color: #fff; border-radius: 8px; padding: 6px; font-size: 11px; font-weight: 900; text-decoration: none; margin-top: 4px; display: block; }
+    .btn { min-height: 52px; border: 0; border-radius: var(--r); font-size: 14px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-decoration: none; text-transform: uppercase; flex: 1; }
+    .btn-cloture { background: var(--secondary); color: #fff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .actionbar { background: #fff; border-top: 2px solid var(--line); padding: 12px; display: flex; gap: 10px; }
   </style>
 </head>
 <body>
@@ -39,33 +49,54 @@
     <header class="topbar">
       <div>
         <div class="tb-title">Flats à l'heure</div>
-        <div style="font-size: 12.5px; opacity: .85;">Gestion de l'occupation</div>
+        <div style="font-size: 12.5px; opacity: .85;">Session : {{ user.nom_complet }}</div>
       </div>
     </header>
 
     <div class="screen">
-      <div style="font-size: 13px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Statut des Chambres</div>
+      <div style="font-size: 13px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Gestion de l'Occupation</div>
       <div class="rooms">
         {% for ch in chambres %}
           {% if ch.statut == 'libre' %}
-            <a href="/flats/occuper/{{ ch.id }}" class="room libre">
+            <div class="room libre">
               <div class="rname">{{ ch.nom }}</div>
               <div class="rstat">LIBRE</div>
-              <div style="font-size: 10px;">{{ "{:,.0f}".format(ch.prix_par_heure).replace(',', ' ') }} FC/h</div>
-            </a>
-          {% else %}
-            <a href="/flats/liberer/{{ ch.id }}" class="room occupee">
+              <div style="font-size: 10px; opacity: .8;">Tarif déf. : {{ "{:,.0f}".format(ch.prix_par_heure).replace(',', ' ') }} FC/h</div>
+              
+              <form action="/flats/occuper" method="POST" style="width: 100%;">
+                <input type="hidden" name="chambre_id" value="{{ ch.id }}">
+                <div class="field-mini">
+                  <label>Montant Perçu (FC)</label>
+                  <input type="number" name="montant_percu" value="{{ ch.prix_par_heure * 2 }}" required>
+                </div>
+                <div class="field-mini">
+                  <label>Durée (heures)</label>
+                  <input type="number" name="duree" value="2" min="1" required>
+                </div>
+                <button type="submit" class="btn-occuper">VALIDER L'OCCUPATION</button>
+              </form>
+            </div>
+          {% elif ch.statut == 'occupee' %}
+            <div class="room occupee">
               <div class="rname">{{ ch.nom }}</div>
               <div class="rstat">OCCUPÉE</div>
-              <div style="font-size: 10px;">Cliquer p/ Libérer</div>
-            </a>
+              <div style="font-size: 11px; font-weight: 800; margin-top: 2px;">Montant : {{ "{:,.0f}".format(ch.montant_recu).replace(',', ' ') }} FC</div>
+              <div style="font-size: 10px; opacity: .9;">{{ ch.duree }}h réservée(s)</div>
+              <a href="/flats/liberer/{{ ch.id }}" class="btn-liberer">LIBÉRER CHAMBRE</a>
+            </div>
+          {% else %}
+            <div class="room hors_service">
+              <div class="rname">{{ ch.nom }}</div>
+              <div class="rstat">HORS SERVICE</div>
+            </div>
           {% endif %}
         {% endfor %}
       </div>
     </div>
 
     <div class="actionbar">
-      <a href="/dashboard" class="btn">RETOUR AU TABLEAU DE BORD</a>
+      <a href="/cloture" class="btn btn-cloture">CLÔTURE CAISSE</a>
+      <a href="/logout" class="btn btn-danger">DÉCONNEXION</a>
     </div>
   </div>
 </body>
