@@ -70,7 +70,9 @@ def get_current_user(session_token: Optional[str]):
     return None
 
 # --- AUTHENTIFICATION ---
+# --- AUTHENTIFICATION ---
 @app.get("/", response_class=HTMLResponse)
+@app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
