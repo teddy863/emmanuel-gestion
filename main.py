@@ -32,14 +32,12 @@ TARIFS_SYSTEME = {
     "flat_heure": 5000.0
 }
 
-# Ventes et Dépenses actives
+# Ventes actives
 DB_TOILETTES = []
 DB_SEJOURS_FLATS = []
 DB_VENTES_COMPTOIR = []
 DB_CUISINE_VENTES = []
 DB_CUISINE_DEPENSES = []
-
-# Registre des dettes enregistrées par les gérants
 DB_DETTES = []
 
 DB_CHAMBRES = [
@@ -55,6 +53,12 @@ DB_COMPTOIR = [
     {"id": "1", "nom": "Eau 1,5 L", "unites_par_casier": 12, "prix_achat_casier": 18000.0, "prix_vente": 2000.0, "quantite_stock": 24},
     {"id": "2", "nom": "Mützig 65cl", "unites_par_casier": 12, "prix_achat_casier": 30000.0, "prix_vente": 3500.0, "quantite_stock": 36},
     {"id": "3", "nom": "Coca 33cl", "unites_par_casier": 24, "prix_achat_casier": 36000.0, "prix_vente": 2000.0, "quantite_stock": 48},
+]
+
+DB_CUISINE_MENU = [
+    {"id": "1", "nom": "Plat Poulet Rôti + Frites", "prix": 15000.0},
+    {"id": "2", "nom": "Plat Poisson Grillé + Makemba", "prix": 20000.0},
+    {"id": "3", "nom": "Omelette + Pain", "prix": 5000.0}
 ]
 
 DB_SALLE_FETES = []
@@ -106,7 +110,7 @@ def logout():
     response.delete_cookie("session_token")
     return response
 
-# --- TABLEAU DE BORD & TARIFS SUPER ADMIN ---
+# --- TABLEAU DE BORD SUPER ADMIN ---
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
@@ -117,6 +121,9 @@ def dashboard(request: Request, session_token: Optional[str] = Cookie(None)):
     recette_flats = sum(s["montant"] for s in DB_SEJOURS_FLATS)
     recette_comptoir = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
     recette_cuisine = sum(v["montant"] for v in DB_CUISINE_VENTES)
+
+    # Détection des ruptures de stock (< 5 bouteilles)
+    alertes_stock = [p for p in DB_COMPTOIR if p["quantite_stock"] < 5]
 
     return templates.TemplateResponse(
         request=request,
@@ -131,6 +138,8 @@ def dashboard(request: Request, session_token: Optional[str] = Cookie(None)):
             "etablissements": DB_ETABLISSEMENTS,
             "clotures": DB_CLOTURES,
             "dettes": DB_DETTES,
+            "depenses_cuisine": DB_CUISINE_DEPENSES,
+            "alertes_stock": alertes_stock,
             "tarifs": TARIFS_SYSTEME
         }
     )
@@ -196,35 +205,137 @@ def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: f
     })
     return RedirectResponse(url=f"/gerants?nouveau_pin={pin_auto}", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- GESTION DES DETTES CLIENTS ---
-@app.post("/dettes/ajouter")
-def enregistrer_dette(client_nom: str = Form(...), client_telephone: str = Form(...), montant: float = Form(...), motif: str = Form(...), session_token: Optional[str] = Cookie(None)):
+# Route pour corriger l'erreur de suppression gérant (GET et POST supportés)
+@app.get("/gerants/supprimer/{gerant_id}")
+@app.post("/gerants/supprimer/{gerant_id}")
+def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
-    if not user:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    DB_DETTES.append({
-        "id": str(uuid.uuid4()),
-        "client_nom": client_nom,
-        "client_telephone": client_telephone,
-        "montant": montant,
-        "motif": motif,
-        "gerant": user["nom_complet"],
-        "est_payee": False,
-        "date": datetime.now().strftime("%d/%m/%Y %H:%M")
-    })
-    return RedirectResponse(url=f"/{user['role'].replace('gerant_', '') if user['role'] != 'cuisinier' else 'cuisine'}", status_code=status.HTTP_303_SEE_OTHER)
+    global DB_GERANTS
+    DB_GERANTS = [g for g in DB_GERANTS if not (g["id"] == gerant_id and g["role"] != "super_admin")]
+    return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.get("/dettes/payer/{dette_id}")
-def regler_dette(dette_id: str, session_token: Optional[str] = Cookie(None)):
+# --- MODULE COMPTOIR & BOISSONS ---
+@app.get("/comptoir", response_class=HTMLResponse)
+def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
-    for d in DB_DETTES:
-        if d["id"] == dette_id:
-            d["est_payee"] = True
-            d["date_paiement"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-            break
-    return RedirectResponse(url="/dashboard" if user and user["role"] == "super_admin" else "/", status_code=status.HTTP_303_SEE_OTHER)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request=request, 
+        name="comptoir.html", 
+        context={
+            "user": user, 
+            "produits": DB_COMPTOIR, 
+            "ventes": DB_VENTES_COMPTOIR,
+            "total_ventes": sum(v["montant"] for v in DB_VENTES_COMPTOIR)
+        }
+    )
 
-# --- MODULES MÉTIERS (ACCÈS ISOLÉ PAR RÔLE) ---
+@app.get("/comptoir/vendre_une/{produit_id}")
+def vendre_une_bouteille(produit_id: str, session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    for p in DB_COMPTOIR:
+        if p["id"] == produit_id and p["quantite_stock"] > 0:
+            p["quantite_stock"] -= 1
+            heure_vente = datetime.now().strftime("%H:%M:%S")
+            DB_VENTES_COMPTOIR.insert(0, {
+                "produit": p["nom"],
+                "quantite": 1,
+                "montant": p["prix_vente"],
+                "heure": heure_vente,
+                "gerant": user["nom_complet"]
+            })
+            break
+    return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
+
+@app.post("/comptoir/ajouter_stock")
+def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...), nombre_casiers: int = Form(...), prix_achat_casier: float = Form(...), prix_vente_bouteille: float = Form(...), session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    nouvelles_bouteilles = unites_par_casier * nombre_casiers
+    trouve = False
+    for p in DB_COMPTOIR:
+        if p["nom"].lower() == nom.lower():
+            p["quantite_stock"] += nouvelles_bouteilles
+            p["prix_achat_casier"] = prix_achat_casier
+            p["prix_vente"] = prix_vente_bouteille
+            trouve = True
+            break
+    if not trouve:
+        DB_COMPTOIR.append({
+            "id": str(uuid.uuid4()),
+            "nom": nom,
+            "unites_par_casier": unites_par_casier,
+            "prix_achat_casier": prix_achat_casier,
+            "prix_vente": prix_vente_bouteille,
+            "quantite_stock": nouvelles_bouteilles
+        })
+    return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
+
+# --- MODULE CUISINE & RESTAURANT ---
+@app.get("/cuisine", response_class=HTMLResponse)
+def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request=request, 
+        name="cuisine.html", 
+        context={
+            "user": user, 
+            "menu": DB_CUISINE_MENU,
+            "ventes": DB_CUISINE_VENTES,
+            "total_ventes": sum(v["montant"] for v in DB_CUISINE_VENTES), 
+            "total_depenses": sum(d["montant"] for d in DB_CUISINE_DEPENSES), 
+            "depenses": DB_CUISINE_DEPENSES
+        }
+    )
+
+@app.post("/cuisine/menu/ajouter")
+def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    DB_CUISINE_MENU.append({"id": str(uuid.uuid4()), "nom": nom, "prix": prix})
+    return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
+
+@app.get("/cuisine/vendre/{plat_id}")
+def vendre_plat(plat_id: str, session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    for item in DB_CUISINE_MENU:
+        if item["id"] == plat_id:
+            heure_vente = datetime.now().strftime("%H:%M:%S")
+            DB_CUISINE_VENTES.insert(0, {
+                "plat": item["nom"],
+                "montant": item["prix"],
+                "heure": heure_vente,
+                "cuisinier": user["nom_complet"]
+            })
+            break
+    return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
+
+@app.post("/cuisine/depense")
+def enregistrer_depense_cuisine(description: str = Form(...), montant: float = Form(...), session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    heure_depense = datetime.now().strftime("%H:%M:%S")
+    DB_CUISINE_DEPENSES.insert(0, {
+        "description": description,
+        "montant": montant,
+        "heure": heure_depense,
+        "cuisinier": user["nom_complet"]
+    })
+    return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
+
+# --- AUTRES MODULES & CLÔTURE ISOLÉE ---
 @app.get("/toilettes", response_class=HTMLResponse)
 def toilettes_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
@@ -238,7 +349,7 @@ def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] 
     if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     type_besoin = "Petit besoin" if montant == TARIFS_SYSTEME["toilettes_petit"] else "Grand besoin"
-    DB_TOILETTES.append({"id": str(uuid.uuid4()), "montant": montant, "type_besoin": type_besoin, "gerant": user["nom_complet"]})
+    DB_TOILETTES.insert(0, {"id": str(uuid.uuid4()), "montant": montant, "type_besoin": type_besoin, "gerant": user["nom_complet"], "heure": datetime.now().strftime("%H:%M:%S")})
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/flats", response_class=HTMLResponse)
@@ -258,7 +369,7 @@ def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...
             ch["statut"] = "occupee"
             ch["montant_recu"] = montant_percu
             ch["duree"] = duree
-            DB_SEJOURS_FLATS.append({"chambre": ch["nom"], "montant": montant_percu, "duree": duree, "gerant": user["nom_complet"]})
+            DB_SEJOURS_FLATS.insert(0, {"chambre": ch["nom"], "montant": montant_percu, "duree": duree, "gerant": user["nom_complet"], "heure": datetime.now().strftime("%H:%M:%S")})
             break
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -275,69 +386,6 @@ def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)
             break
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.get("/comptoir", response_class=HTMLResponse)
-def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="comptoir.html", context={"user": user, "produits": DB_COMPTOIR, "ventes": DB_VENTES_COMPTOIR})
-
-@app.get("/comptoir/vendre_une/{produit_id}")
-def vendre_une_bouteille(produit_id: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for p in DB_COMPTOIR:
-        if p["id"] == produit_id and p["quantite_stock"] > 0:
-            p["quantite_stock"] -= 1
-            cout_unitaire = p["prix_achat_casier"] / p["unites_par_casier"]
-            benefice = p["prix_vente"] - cout_unitaire
-            DB_VENTES_COMPTOIR.append({"produit": p["nom"], "quantite": 1, "montant": p["prix_vente"], "benefice": benefice, "gerant": user["nom_complet"]})
-            break
-    return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
-
-@app.post("/comptoir/ajouter_stock")
-def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...), nombre_casiers: int = Form(...), prix_achat_casier: float = Form(...), prix_vente_bouteille: float = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    nouvelles_bouteilles = unites_par_casier * nombre_casiers
-    trouve = False
-    for p in DB_COMPTOIR:
-        if p["nom"].lower() == nom.lower():
-            p["quantite_stock"] += nouvelles_bouteilles
-            p["prix_achat_casier"] = prix_achat_casier
-            p["prix_vente"] = prix_vente_bouteille
-            trouve = True
-            break
-    if not trouve:
-        DB_COMPTOIR.append({"id": str(uuid.uuid4()), "nom": nom, "unites_par_casier": unites_par_casier, "prix_achat_casier": prix_achat_casier, "prix_vente": prix_vente_bouteille, "quantite_stock": nouvelles_bouteilles})
-    return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
-
-@app.get("/cuisine", response_class=HTMLResponse)
-def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="cuisine.html", context={"user": user, "total_ventes": sum(v["montant"] for v in DB_CUISINE_VENTES), "total_depenses": sum(d["montant"] for d in DB_CUISINE_DEPENSES), "depenses": DB_CUISINE_DEPENSES})
-
-@app.post("/cuisine/vendre")
-def vendre_combinaison_cuisine(description_plat: str = Form(...), prix_vente: float = Form(...), quantite: int = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    total = prix_vente * quantite
-    DB_CUISINE_VENTES.append({"plat": description_plat, "quantite": quantite, "montant": total, "cuisinier": user["nom_complet"]})
-    return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
-
-@app.post("/cuisine/depense")
-def enregistrer_depense_cuisine(description: str = Form(...), montant: float = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    DB_CUISINE_DEPENSES.append({"description": description, "montant": montant, "cuisinier": user["nom_complet"]})
-    return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
-
 @app.get("/salle", response_class=HTMLResponse)
 def salle_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
@@ -352,14 +400,13 @@ def locataires_page(request: Request, session_token: Optional[str] = Cookie(None
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request=request, name="locataires.html", context={"user": user, "locataires": DB_LOCATAIRES})
 
-# --- CLÔTURE ISOLÉE PAR RÔLE & REINITIALISATION ---
+# --- CLÔTURE ISOLÉE ---
 @app.get("/cloture", response_class=HTMLResponse)
 def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Calcul du montant propre uniquement au rôle connecté
     if user["role"] == "gerant_toilettes":
         total_attendu = sum(e["montant"] for e in DB_TOILETTES)
     elif user["role"] == "gerant_flats":
@@ -368,13 +415,18 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
         total_attendu = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
     elif user["role"] == "cuisinier":
         total_attendu = sum(v["montant"] for v in DB_CUISINE_VENTES)
-    else: # Super Admin
+    else:
         total_attendu = sum(e["montant"] for e in DB_TOILETTES) + sum(s["montant"] for s in DB_SEJOURS_FLATS) + sum(v["montant"] for v in DB_VENTES_COMPTOIR) + sum(v["montant"] for v in DB_CUISINE_VENTES)
+
+    if user["role"] == "super_admin":
+        mes_clotures = DB_CLOTURES
+    else:
+        mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
 
     return templates.TemplateResponse(
         request=request,
         name="cloture.html", 
-        context={"user": user, "total_attendu": total_attendu, "clotures": DB_CLOTURES, "message": None}
+        context={"user": user, "total_attendu": total_attendu, "clotures": mes_clotures, "message": None}
     )
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
@@ -385,7 +437,6 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
 
     global DB_TOILETTES, DB_SEJOURS_FLATS, DB_VENTES_COMPTOIR, DB_CUISINE_VENTES, DB_CUISINE_DEPENSES
 
-    # 1. Calcul du montant propre à l'utilisateur
     if user["role"] == "gerant_toilettes":
         total_attendu = sum(e["montant"] for e in DB_TOILETTES)
         detail_txt = f"Toilettes: {total_attendu:,.0f} FC"
@@ -408,7 +459,7 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         detail_txt = f"Cuisine: {total_attendu:,.0f} FC"
         DB_CUISINE_VENTES.clear()
         DB_CUISINE_DEPENSES.clear()
-    else: # Super admin
+    else:
         t_toil = sum(e["montant"] for e in DB_TOILETTES)
         t_flat = sum(s["montant"] for s in DB_SEJOURS_FLATS)
         t_comp = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
@@ -426,7 +477,6 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
     date_str = maintenant.strftime("%d/%m/%Y")
     heure_str = maintenant.strftime("%H:%M:%S")
 
-    # 2. Archivage
     DB_CLOTURES.insert(0, {
         "id": str(uuid.uuid4()),
         "date": date_str,
@@ -439,10 +489,15 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         "detail": detail_txt
     })
 
-    message_succes = f"Service clôturé avec succès à {heure_str} ! Recette ({montant_compte:,.0f} FC) envoyée aux archives."
+    if user["role"] == "super_admin":
+        mes_clotures = DB_CLOTURES
+    else:
+        mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
+
+    message_succes = f"Service clôturé avec succès à {heure_str} ! Recette ({montant_compte:,.0f} FC) envoyée aux archives de la direction."
 
     return templates.TemplateResponse(
         request=request,
         name="cloture.html", 
-        context={"user": user, "total_attendu": 0.0, "clotures": DB_CLOTURES, "message": message_succes}
+        context={"user": user, "total_attendu": 0.0, "clotures": mes_clotures, "message": message_succes}
     )
