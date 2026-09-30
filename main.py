@@ -217,6 +217,7 @@ def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)
     return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- MODULE COMPTOIR & BOISSONS ---
+# --- MODULE COMPTOIR & BOISSONS ---
 @app.get("/comptoir", response_class=HTMLResponse)
 def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
@@ -229,34 +230,32 @@ def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None))
             "user": user, 
             "produits": DB_COMPTOIR, 
             "ventes": DB_VENTES_COMPTOIR,
-            "total_ventes": sum(v["montant"] for v in DB_VENTES_COMPTOIR)
+            "total_ventes": sum(v["montant"] for v in DB_VENTES_COMPTOIR),
+            "erreur_stock": None
         }
     )
 
 @app.get("/comptoir/vendre_une/{produit_id}")
-def vendre_une_bouteille(produit_id: str, session_token: Optional[str] = Cookie(None)):
+def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     for p in DB_COMPTOIR:
         if p["id"] == produit_id:
-            # Vérification stricte du stock
             if p["quantite_stock"] <= 0:
-                # Si le stock est à 0, on recharge la page avec une alerte
                 return templates.TemplateResponse(
-                    request=Request,
+                    request=request,
                     name="comptoir.html",
                     context={
                         "user": user,
                         "produits": DB_COMPTOIR,
                         "ventes": DB_VENTES_COMPTOIR,
                         "total_ventes": sum(v["montant"] for v in DB_VENTES_COMPTOIR),
-                        "erreur_stock": f"Impossible de vendre ! Le stock de '{p['nom']}' est épuisé (0 bouteille). Veuillez réapprovisionner ci-dessous."
+                        "erreur_stock": f"Stock épuisé pour '{p['nom']}' ! Veuillez ajouter des casiers ci-dessous."
                     }
                 )
 
-            # Si le stock est disponible, la vente s'effectue
             p["quantite_stock"] -= 1
             heure_vente = datetime.now().strftime("%H:%M:%S")
             DB_VENTES_COMPTOIR.insert(0, {
@@ -267,6 +266,43 @@ def vendre_une_bouteille(produit_id: str, session_token: Optional[str] = Cookie(
                 "gerant": user["nom_complet"]
             })
             break
+
+    return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
+
+# Route unique pour création de boisson ET réapprovisionnement de casiers
+@app.post("/comptoir/ajouter_stock")
+def ajouter_stock_casier(
+    nom: str = Form(...), 
+    unites_par_casier: int = Form(...), 
+    nombre_casiers: int = Form(...), 
+    prix_achat_casier: float = Form(...), 
+    prix_vente_bouteille: float = Form(...), 
+    session_token: Optional[str] = Cookie(None)
+):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    nouvelles_bouteilles = unites_par_casier * nombre_casiers
+    trouve = False
+
+    for p in DB_COMPTOIR:
+        if p["nom"].strip().lower() == nom.strip().lower():
+            p["quantite_stock"] += nouvelles_bouteilles
+            p["prix_achat_casier"] = prix_achat_casier
+            p["prix_vente"] = prix_vente_bouteille
+            trouve = True
+            break
+
+    if not trouve:
+        DB_COMPTOIR.append({
+            "id": str(uuid.uuid4()),
+            "nom": nom.strip(),
+            "unites_par_casier": unites_par_casier,
+            "prix_achat_casier": prix_achat_casier,
+            "prix_vente": prix_vente_bouteille,
+            "quantite_stock": nouvelles_bouteilles
+        })
 
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
