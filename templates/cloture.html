@@ -56,7 +56,7 @@
     }
 
     .hero-val {
-      font-size: 30px;
+      font-size: 32px;
       font-weight: 900;
       color: #64B5F6;
       text-align: center;
@@ -120,7 +120,7 @@
       background: #121A21;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 10px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -147,16 +147,16 @@
 
       <form action="/cloture/valider" method="POST" style="display: flex; flex-direction: column; gap: 12px;">
         <div class="field">
-          <label style="text-align: center;">Montant Physique Compté en Caisse (FC)</label>
+          <label style="text-align: center;">Montant Physique en Caisse (FC)</label>
           <input type="number" name="montant_compte" required placeholder="Ex: 50000">
         </div>
-        <button type="submit" class="btn-submit" onclick="return confirm('Confirmer la clôture de la journée ? Les comptes repartiront à 0 FC.');">
-          VALIDER LA CLÔTURE & RÉINITIALISER LA JOURNÉE
+        <button type="submit" class="btn-submit" onclick="return confirm('Confirmer la clôture de la journée ? Les compteurs repartiront à 0 FC.');">
+          VALIDER LA CLÔTURE DU SERVICE
         </button>
       </form>
     </div>
 
-    <!-- Section Archives / Historique des ventes -->
+    <!-- Historique des Clôtures / Archives -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">Archives des Clôtures Précédentes</div>
     
     <div class="card">
