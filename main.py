@@ -307,12 +307,13 @@ def ajouter_stock_casier(
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- MODULE CUISINE & RESTAURANT ---
-# Menu initial avec unités de mesure (ex: par morceau, par boule, par portion/g)
+# --- MODULE CUISINE & RESTAURANT ---
+# Menu modifiable dynamiquement par le cuisinier
 DB_CUISINE_MENU = [
     {"id": "1", "nom": "Cuisse de poulet", "prix": 5000.0, "unite": "morceau"},
     {"id": "2", "nom": "Poisson grillé", "prix": 10000.0, "unite": "morceau"},
-    {"id": "3", "nom": "Foufou", "prix": 250.0, "unite": "boule"},
-    {"id": "4", "nom": "Makemba", "prix": 500.0, "unite": "portion"},
+    {"id": "3", "nom": "Foufou", "prix": 500.0, "unite": "boule"},
+    {"id": "4", "nom": "Makemba", "prix": 1000.0, "unite": "portion"},
     {"id": "5", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
 ]
 
@@ -324,7 +325,6 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
 
     total_v = sum(v["montant"] for v in DB_CUISINE_VENTES)
     total_d = sum(d["montant"] for d in DB_CUISINE_DEPENSES)
-    benefice_net = total_v - total_d
 
     return templates.TemplateResponse(
         request=request, 
@@ -336,7 +336,7 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
             "depenses": DB_CUISINE_DEPENSES,
             "total_ventes": total_v, 
             "total_depenses": total_d,
-            "benefice_net": benefice_net
+            "benefice_net": total_v - total_d
         }
     )
 
@@ -346,6 +346,7 @@ def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str 
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     
+    # Le cuisinier definit lui-meme l'article et son prix
     DB_CUISINE_MENU.append({
         "id": str(uuid.uuid4()), 
         "nom": nom.strip(), 

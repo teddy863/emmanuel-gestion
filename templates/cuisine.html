@@ -55,23 +55,55 @@
       gap: 12px;
     }
 
-    .menu-item-row {
-      background: #121A21;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    /* Grille en carre comme au comptoir */
+    .grid-menu {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
 
+    .card-item {
+      background: #121A21;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .item-name { font-weight: 900; font-size: 14px; }
+    .item-price { font-weight: 900; color: #64B5F6; font-size: 12px; }
+
+    .qty-picker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #1C2732;
+      border-radius: 6px;
+      padding: 2px 4px;
+    }
+
+    .btn-qty {
+      background: var(--primary);
+      color: #fff;
+      border: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      font-weight: 900;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
     .qty-input {
-      width: 65px !important;
-      padding: 6px !important;
+      width: 35px !important;
+      padding: 2px !important;
       text-align: center;
       font-weight: 900;
-      border-color: var(--primary) !important;
+      border: 0 !important;
+      background: transparent !important;
     }
 
     .field { display: flex; flex-direction: column; gap: 4px; }
@@ -97,6 +129,7 @@
       text-transform: uppercase;
       cursor: pointer;
       width: 100%;
+      margin-top: 8px;
     }
 
     .btn-add {
@@ -152,32 +185,34 @@
         <span>DÉPENSES : <b style="color: #FF8888;">{{ "{:,.0f}".format(total_depenses).replace(',', ' ') }} FC</b></span>
       </div>
       <div style="border-top: 1px solid var(--line); padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">BÉNÉFICE NET CUISINE :</span>
+        <span style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">BÉNÉFICE NET :</span>
         <span style="font-size: 20px; font-weight: 900; color: {% if benefice_net >= 0 %}#32D785{% else %}#FF8888{% endif %};">
           {{ "{:,.0f}".format(benefice_net).replace(',', ' ') }} FC
         </span>
       </div>
     </div>
 
-    <!-- 1. Formulaire de composition du plat par Quantité -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Composer & Vendre un Plat (Quantités)</div>
+    <!-- 1. Formulaire de vente en carre/grille -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Composer un Plat & Vendre</div>
     
-    <form action="/cuisine/vendre_combinaison" method="POST" class="card">
-      <div style="display: flex; flex-direction: column; gap: 8px;">
+    <form action="/cuisine/vendre_combinaison" method="POST">
+      <div class="grid-menu">
         {% for m in menu %}
-          <div class="menu-item-row">
+          <div class="card-item">
             <div>
-              <div style="font-weight: 800; font-size: 14px;">{{ m.nom }}</div>
-              <div style="font-size: 11px; color: #64B5F6;">{{ "{:,.0f}".format(m.prix).replace(',', ' ') }} FC / {{ m.unite }}</div>
+              <div class="item-name">{{ m.nom }}</div>
+              <div class="item-price">{{ "{:,.0f}".format(m.prix).replace(',', ' ') }} FC / {{ m.unite }}</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 11px; color: var(--muted);">Qté:</span>
-              <input type="number" name="qty_{{ m.id }}" min="0" value="0" class="qty-input">
+            
+            <div class="qty-picker">
+              <button type="button" class="btn-qty" onclick="var inp=document.getElementById('q_{{ m.id }}'); if(inp.value>0) inp.value--;">-</button>
+              <input type="number" id="q_{{ m.id }}" name="qty_{{ m.id }}" value="0" min="0" class="qty-input" readonly>
+              <button type="button" class="btn-qty" onclick="var inp=document.getElementById('q_{{ m.id }}'); inp.value++;">+</button>
             </div>
           </div>
         {% else %}
-          <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 10px;">
-            Aucun élément au menu. Ajoutez vos articles ci-dessous.
+          <div style="grid-column: span 2; text-align: center; color: var(--muted); font-size: 12px; padding: 10px;">
+            Aucun élément au menu. Remplissez le formulaire ci-dessous.
           </div>
         {% endfor %}
       </div>
@@ -205,49 +240,14 @@
       {% endfor %}
     </div>
 
-    <!-- 2. Gestion des Dépenses de la cuisine -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Enregistrer une Dépense (Achats vivres/charbon)</div>
-    
-    <form action="/cuisine/depense" method="POST" class="card">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <div class="field">
-          <label>Description Dépense</label>
-          <input type="text" name="description" required placeholder="ex: Charbon, Huile, Épices...">
-        </div>
-        <div class="field">
-          <label>Montant (FC)</label>
-          <input type="number" name="montant" required placeholder="ex: 10000">
-        </div>
-      </div>
-      <button type="submit" class="btn-add" style="background: #D9392B;">ENREGISTRER LA DÉPENSE</button>
-    </form>
-
-    <!-- Historique des Dépenses -->
-    <div class="card">
-      <div style="font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase;">Aperçu des Dépenses</div>
-      {% for d in depenses %}
-        <div class="row-item">
-          <div>
-            <div style="font-weight: 800; color: #FFF;">🛒 {{ d.description }}</div>
-            <div style="font-size: 11px; color: var(--muted);">à {{ d.heure }}</div>
-          </div>
-          <span style="font-weight: 900; color: #FF8888;">-{{ "{:,.0f}".format(d.montant).replace(',', ' ') }} FC</span>
-        </div>
-      {% else %}
-        <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 6px;">
-          Aucune dépense enregistrée.
-        </div>
-      {% endfor %}
-    </div>
-
-    <!-- 3. Ajouter un nouvel élément au menu -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">3. Ajouter un Article au Menu</div>
+    <!-- 2. Formulaire pour ajouter/fixer un prix de menu -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Ajouter un Article & Fixer son Prix</div>
     
     <form action="/cuisine/menu/ajouter" method="POST" class="card">
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
         <div class="field">
           <label>Nom de l'article</label>
-          <input type="text" name="nom" required placeholder="ex: Poulet, Foufou, Makemba...">
+          <input type="text" name="nom" required placeholder="ex: Cuisse, Foufou, Makemba...">
         </div>
         <div class="field">
           <label>Unité</label>
@@ -259,10 +259,27 @@
         </div>
       </div>
       <div class="field">
-        <label>Prix Unitaire (FC)</label>
+        <label>Prix Unitaire fixé (FC)</label>
         <input type="number" name="prix" required placeholder="ex: 5000">
       </div>
-      <button type="submit" class="btn-add">AJOUTER AU MENU</button>
+      <button type="submit" class="btn-add">ENREGISTRER AU MENU</button>
+    </form>
+
+    <!-- 3. Gestion des Dépenses -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">3. Enregistrer une Dépense (Achats vivres/charbon)</div>
+    
+    <form action="/cuisine/depense" method="POST" class="card">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div class="field">
+          <label>Description Dépense</label>
+          <input type="text" name="description" required placeholder="ex: Charbon, Huile...">
+        </div>
+        <div class="field">
+          <label>Montant (FC)</label>
+          <input type="number" name="montant" required placeholder="ex: 10000">
+        </div>
+      </div>
+      <button type="submit" class="btn-add" style="background: #D9392B;">ENREGISTRER LA DÉPENSE</button>
     </form>
 
     <!-- Navigation -->
