@@ -55,7 +55,7 @@
       gap: 12px;
     }
 
-    /* Grille en carre comme au comptoir */
+    /* Grille de cartes cliquables */
     .grid-menu {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -64,13 +64,21 @@
 
     .card-item {
       background: #121A21;
-      border: 1px solid var(--line);
+      border: 2px solid var(--line);
       border-radius: 10px;
       padding: 12px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 8px;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+
+    .card-item.selected {
+      border-color: var(--secondary);
+      background: #112D20;
     }
 
     .item-name { font-weight: 900; font-size: 14px; }
@@ -82,28 +90,30 @@
       justify-content: space-between;
       background: #1C2732;
       border-radius: 6px;
-      padding: 2px 4px;
+      padding: 3px;
     }
 
     .btn-qty {
       background: var(--primary);
       color: #fff;
       border: 0;
-      width: 28px;
-      height: 28px;
-      border-radius: 4px;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
       font-weight: 900;
-      font-size: 16px;
+      font-size: 18px;
       cursor: pointer;
     }
 
     .qty-input {
-      width: 35px !important;
-      padding: 2px !important;
+      width: 40px !important;
+      padding: 0 !important;
       text-align: center;
       font-weight: 900;
+      font-size: 15px;
       border: 0 !important;
       background: transparent !important;
+      color: #FFF !important;
     }
 
     .field { display: flex; flex-direction: column; gap: 4px; }
@@ -124,12 +134,14 @@
       color: #fff;
       border: 0;
       border-radius: 10px;
-      height: 48px;
+      height: 52px;
       font-weight: 900;
+      font-size: 15px;
       text-transform: uppercase;
       cursor: pointer;
       width: 100%;
-      margin-top: 8px;
+      margin-top: 10px;
+      box-shadow: 0 4px 12px rgba(30,158,99,0.3);
     }
 
     .btn-add {
@@ -181,7 +193,7 @@
     <!-- Bilan financier en temps réel -->
     <div class="card" style="background: linear-gradient(145deg, #1C2732 0%, #0A1118 100%);">
       <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; color: var(--muted);">
-        <span>VENTES : <b style="color: #64B5F6;">{{ "{:,.0f}".format(total_ventes).replace(',', ' ') }} FC</b></span>
+        <span>VENTES DU JOUR : <b style="color: #64B5F6;">{{ "{:,.0f}".format(total_ventes).replace(',', ' ') }} FC</b></span>
         <span>DÉPENSES : <b style="color: #FF8888;">{{ "{:,.0f}".format(total_depenses).replace(',', ' ') }} FC</b></span>
       </div>
       <div style="border-top: 1px solid var(--line); padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
@@ -192,22 +204,22 @@
       </div>
     </div>
 
-    <!-- 1. Formulaire de vente en carre/grille -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Composer un Plat & Vendre</div>
+    <!-- 1. Sélection tactile multi-articles -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Toucher les cartes pour composer la commande client</div>
     
     <form action="/cuisine/vendre_combinaison" method="POST">
       <div class="grid-menu">
         {% for m in menu %}
-          <div class="card-item">
+          <div class="card-item" id="card_{{ m.id }}" onclick="toggleSelect('{{ m.id }}')">
             <div>
               <div class="item-name">{{ m.nom }}</div>
               <div class="item-price">{{ "{:,.0f}".format(m.prix).replace(',', ' ') }} FC / {{ m.unite }}</div>
             </div>
             
-            <div class="qty-picker">
-              <button type="button" class="btn-qty" onclick="var inp=document.getElementById('q_{{ m.id }}'); if(inp.value>0) inp.value--;">-</button>
+            <div class="qty-picker" onclick="event.stopPropagation();">
+              <button type="button" class="btn-qty" onclick="adjustQty('{{ m.id }}', -1)">-</button>
               <input type="number" id="q_{{ m.id }}" name="qty_{{ m.id }}" value="0" min="0" class="qty-input" readonly>
-              <button type="button" class="btn-qty" onclick="var inp=document.getElementById('q_{{ m.id }}'); inp.value++;">+</button>
+              <button type="button" class="btn-qty" onclick="adjustQty('{{ m.id }}', 1)">+</button>
             </div>
           </div>
         {% else %}
@@ -218,9 +230,36 @@
       </div>
 
       {% if menu %}
-        <button type="submit" class="btn-submit">VALIDER LA VENTE DU PLAT</button>
+        <button type="submit" class="btn-submit">ENREGISTRER LA VENTE COMBINÉE</button>
       {% endif %}
     </form>
+
+    <!-- Script de gestion interactive tactile -->
+    <script>
+      function toggleSelect(id) {
+        var inp = document.getElementById('q_' + id);
+        var card = document.getElementById('card_' + id);
+        
+        // Si non selectionne, on passe a 1. Si deja selectionne, on rajoute +1
+        var current = parseInt(inp.value);
+        inp.value = current + 1;
+        card.classList.add('selected');
+      }
+
+      function adjustQty(id, delta) {
+        var inp = document.getElementById('q_' + id);
+        var card = document.getElementById('card_' + id);
+        var val = parseInt(inp.value) + delta;
+        if (val < 0) val = 0;
+        inp.value = val;
+        
+        if (val > 0) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      }
+    </script>
 
     <!-- Historique des ventes -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Ventes effectuées aujourd'hui</div>
@@ -240,8 +279,8 @@
       {% endfor %}
     </div>
 
-    <!-- 2. Formulaire pour ajouter/fixer un prix de menu -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Ajouter un Article & Fixer son Prix</div>
+    <!-- 2. Pré-définition des éléments du menu et prix -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Ajouter un Article au Menu (Nom, Unité & Prix)</div>
     
     <form action="/cuisine/menu/ajouter" method="POST" class="card">
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
@@ -266,7 +305,7 @@
     </form>
 
     <!-- 3. Gestion des Dépenses -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">3. Enregistrer une Dépense (Achats vivres/charbon)</div>
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">3. Enregistrer une Dépense (Achat Vivres / Charbon)</div>
     
     <form action="/cuisine/depense" method="POST" class="card">
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
