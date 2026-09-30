@@ -3,79 +3,223 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Emmanuel — Établissements</title>
- <style>
-  :root {
-    --bg-dark: #121A21;
-    --card-bg: #1C2732;
-    --primary: #0E5C8C;
-    --text: #FFFFFF;
-    --muted: #8E9BAE;
-    --line: #2A3847;
-  }
-  
-  /* Supression de toutes les marges et cadres smartphone artificiels */
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  
-  html, body {
-    width: 100vw;
-    min-height: 100vh;
-    background-color: var(--bg-dark);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow-x: hidden;
-    overflow-y: auto; /* Permet de défiler vers le bas normalement */
-  }
+  <title>Emmanuel — Gestion des Gérants</title>
+  <style>
+    :root {
+      --bg-dark: #121A21;
+      --card-bg: #1C2732;
+      --primary: #0E5C8C;
+      --secondary: #1E9E63;
+      --danger: #D9392B;
+      --text: #FFFFFF;
+      --muted: #8E9BAE;
+      --line: #2A3847;
+      --r: 12px;
+    }
 
-  /* Conteneur fluide occupant 100% du téléphone */
-  .app-container {
-    width: 100%;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Les menus déroulants restent dans le cadre */
-  select, input {
-    width: 100%;
-    max-width: 100%;
-    padding: 12px;
-    background: #121A21;
-    color: #FFF;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    font-size: 15px;
-  }
-</style>
+    html, body {
+      width: 100vw;
+      min-height: 100vh;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      background: #0A1118;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--r);
+      padding: 14px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      background: #121A21;
+      color: #FFF;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    /* Option de sélection personnalisée intégrée à l'application */
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #121A21;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .radio-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+    }
+
+    .btn-submit {
+      background: var(--primary);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      height: 48px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .row-gerant {
+      background: var(--card-bg);
+      padding: 14px;
+      border-radius: var(--r);
+      border: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn-back {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      color: #fff;
+      border-radius: 10px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-top: 10px;
+    }
+
+    .badge-pin {
+      background: #121A21;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #32D785;
+      font-weight: 900;
+      border: 1px solid var(--line);
+    }
+  </style>
 </head>
 <body>
+
   <header class="topbar">
-    <div style="font-size: 18px; font-weight: 900;">Gestion des Établissements</div>
-    <div style="font-size: 12px; color: var(--muted);">Sites du Réseau Emmanuel</div>
+    <div style="font-size: 18px; font-weight: 900;">Gérants & Postes</div>
+    <div style="font-size: 12px; color: var(--muted);">Affectation par Établissement</div>
   </header>
 
   <main class="container">
-    <div style="font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase;">AJOUTER UN NOUVEAU SITE</div>
-    <form action="/etablissements/creer" method="POST" class="card">
-      <div class="field">
-        <label>Nom de l'établissement</label>
-        <input type="text" name="nom" required placeholder="ex: Emmanuel - Bandal, Tchangu...">
+    {% if nouveau_pin %}
+      <div style="background: #123D28; border: 1px solid #1E9E63; padding: 12px; border-radius: 10px; color: #32D785; font-size: 13px; font-weight: 800; text-align: center;">
+        Nouveau compte créé ! PIN généré : <b>{{ nouveau_pin }}</b>
       </div>
-      <button type="submit" class="btn-submit">ENREGISTRER LE SITE</button>
+    {% endif %}
+
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Affecter un gérant à un site</div>
+    
+    <form action="/gerants/creer" method="POST" class="card">
+      <div class="field">
+        <label>Nom complet du gérant</label>
+        <input type="text" name="nom_complet" required placeholder="ex: Jeanne M.">
+      </div>
+      
+      <div class="field">
+        <label>Établissement (Site)</label>
+        <div class="radio-group">
+          {% for site in etablissements %}
+            <label class="radio-option">
+              <input type="radio" name="etablissement_id" value="{{ site.id }}" {% if loop.first %}checked{% endif %}>
+              <span>{{ site.nom }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Poste / Rôle affecté</label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="role" value="gerant_toilettes" checked>
+            <span>Gérant Toilettes</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="role" value="gerant_flats">
+            <span>Gérant Flats</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="role" value="gerant_comptoir">
+            <span>Gérant Comptoir</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="role" value="cuisinier">
+            <span>Cuisinier / Restaurant</span>
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit">GÉNÉRER LE COMPTE & PIN</button>
     </form>
 
-    <div style="font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase; margin-top: 8px;">ÉTABLISSEMENTS ACTIFS</div>
-    {% for site in etablissements %}
-      <div class="row-site">
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">Comptes gérants enregistrés</div>
+    
+    {% for g in gerants %}
+      <div class="row-gerant">
         <div>
-          <div style="font-weight: 900; font-size: 15px;">{{ site.nom }}</div>
-          <div style="font-size: 11px; color: #32D785; font-weight: 800; margin-top: 2px;">● Opérationnel</div>
+          <div style="font-weight: 900; font-size: 15px;">{{ g.nom_complet }}</div>
+          <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">
+            {{ g.role_label }} · PIN: <span class="badge-pin">{{ g.pin }}</span>
+          </div>
+          <div style="font-size: 11px; color: #64B5F6; font-weight: 800; margin-top: 4px;">
+            Site : {{ g.etablissement_nom if g.etablissement_nom else 'Tous les sites' }}
+          </div>
         </div>
+        {% if g.role != 'super_admin' %}
+          <a href="/gerants/supprimer/{{ g.id }}" style="font-size: 11px; color: var(--danger); font-weight: 900; text-decoration: none;" onclick="return confirm('Supprimer ce gérant ?');">SUPPRIMER</a>
+        {% endif %}
       </div>
     {% endfor %}
 
-    <a href="/dashboard" class="btn-back" style="margin-top: 10px;">RETOUR TABLEAU DE BORD</a>
+    <a href="/dashboard" class="btn-back">RETOUR TABLEAU DE BORD</a>
   </main>
+
 </body>
 </html>

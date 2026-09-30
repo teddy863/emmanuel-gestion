@@ -58,7 +58,7 @@
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field label { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
 
-    select, input {
+    input[type="text"] {
       width: 100%;
       padding: 12px;
       background: #121A21;
@@ -66,6 +66,31 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       font-size: 14px;
+    }
+
+    /* Option de sélection personnalisée intégrée à l'application */
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #121A21;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .radio-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
     }
 
     .btn-submit {
@@ -113,21 +138,6 @@
       font-weight: 900;
       border: 1px solid var(--line);
     }
-    select {
-  width: 100%;
-  padding: 12px;
-  background: #121A21;
-  color: #FFF;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 14px;
-  appearance: none; /* Empeche le pop-up natif Android hors cadre */
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 18px;
-}
   </style>
 </head>
 <body>
@@ -154,21 +164,36 @@
       
       <div class="field">
         <label>Établissement (Site)</label>
-        <select name="etablissement_id" required>
+        <div class="radio-group">
           {% for site in etablissements %}
-            <option value="{{ site.id }}">{{ site.nom }}</option>
+            <label class="radio-option">
+              <input type="radio" name="etablissement_id" value="{{ site.id }}" {% if loop.first %}checked{% endif %}>
+              <span>{{ site.nom }}</span>
+            </label>
           {% endfor %}
-        </select>
+        </div>
       </div>
 
       <div class="field">
         <label>Poste / Rôle affecté</label>
-        <select name="role" required>
-          <option value="gerant_toilettes">Gérant Toilettes</option>
-          <option value="gerant_flats">Gérant Flats</option>
-          <option value="gerant_comptoir">Gérant Comptoir</option>
-          <option value="cuisinier">Cuisinier / Restaurant</option>
-        </select>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="role" value="gerant_toilettes" checked>
+            <span>Gérant Toilettes</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="role" value="gerant_flats">
+            <span>Gérant Flats</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="role" value="gerant_comptoir">
+            <span>Gérant Comptoir</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="role" value="cuisinier">
+            <span>Cuisinier / Restaurant</span>
+          </label>
+        </div>
       </div>
 
       <button type="submit" class="btn-submit">GÉNÉRER LE COMPTE & PIN</button>
