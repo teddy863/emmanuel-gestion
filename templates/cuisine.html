@@ -55,7 +55,6 @@
       gap: 12px;
     }
 
-    /* Grille de cartes cliquables */
     .grid-menu {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -140,8 +139,21 @@
       text-transform: uppercase;
       cursor: pointer;
       width: 100%;
-      margin-top: 10px;
       box-shadow: 0 4px 12px rgba(30,158,99,0.3);
+    }
+
+    .btn-reset {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      height: 38px;
+      font-weight: 800;
+      font-size: 12px;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 6px;
     }
 
     .btn-add {
@@ -204,10 +216,10 @@
       </div>
     </div>
 
-    <!-- 1. Sélection tactile multi-articles -->
+    <!-- 1. Sélection tactile multi-articles avec annulation possible -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Toucher les cartes pour composer la commande client</div>
     
-    <form action="/cuisine/vendre_combinaison" method="POST">
+    <form action="/cuisine/vendre_combinaison" method="POST" id="formVente">
       <div class="grid-menu">
         {% for m in menu %}
           <div class="card-item" id="card_{{ m.id }}" onclick="toggleSelect('{{ m.id }}')">
@@ -230,17 +242,18 @@
       </div>
 
       {% if menu %}
-        <button type="submit" class="btn-submit">ENREGISTRER LA VENTE COMBINÉE</button>
+        <div style="margin-top: 10px;">
+          <button type="submit" class="btn-submit">ENREGISTRER LA VENTE COMBINÉE</button>
+          <button type="button" class="btn-reset" onclick="resetAllSelection()">↺ EFFACER LA SÉLECTION (ANNULER)</button>
+        </div>
       {% endif %}
     </form>
 
-    <!-- Script de gestion interactive tactile -->
+    <!-- Script de gestion interactive avec annulation -->
     <script>
       function toggleSelect(id) {
         var inp = document.getElementById('q_' + id);
         var card = document.getElementById('card_' + id);
-        
-        // Si non selectionne, on passe a 1. Si deja selectionne, on rajoute +1
         var current = parseInt(inp.value);
         inp.value = current + 1;
         card.classList.add('selected');
@@ -259,9 +272,16 @@
           card.classList.remove('selected');
         }
       }
+
+      function resetAllSelection() {
+        var inputs = document.querySelectorAll('.qty-input');
+        var cards = document.querySelectorAll('.card-item');
+        inputs.forEach(function(inp) { inp.value = 0; });
+        cards.forEach(function(c) { c.classList.remove('selected'); });
+      }
     </script>
 
-    <!-- Historique des ventes -->
+    <!-- Historique des ventes du jour -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Ventes effectuées aujourd'hui</div>
     <div class="card">
       {% for v in ventes %}
@@ -279,8 +299,8 @@
       {% endfor %}
     </div>
 
-    <!-- 2. Pré-définition des éléments du menu et prix -->
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Ajouter un Article au Menu (Nom, Unité & Prix)</div>
+    <!-- 2. Pré-définition des éléments du menu et prix (CONSERVÉ ET INTACT) -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Ajouter / Pré-définir un Article au Menu</div>
     
     <form action="/cuisine/menu/ajouter" method="POST" class="card">
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
