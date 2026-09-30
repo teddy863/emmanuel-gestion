@@ -16,67 +16,262 @@
       --line: #2A3847;
       --r: 12px;
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100vw; min-height: 100vh; background: var(--bg-dark); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; overflow-y: auto; }
-    .topbar { background: #0A1118; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-    .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
-    .hero { background: linear-gradient(145deg, #0E5C8C 0%, #073450 100%); border-radius: var(--r); padding: 18px; border: 1px solid #1B78B3; }
-    .card { background: var(--card-bg); border-radius: var(--r); padding: 14px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    input { width: 100%; padding: 10px; background: #121A21; color: #FFF; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
-    .btn-submit { background: var(--secondary); color: #FFF; border: 0; border-radius: 8px; height: 42px; font-weight: 900; font-size: 12px; cursor: pointer; text-transform: uppercase; width: 100%; }
-    .btn-nav { height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 900; text-transform: uppercase; color: #fff; width: 100%; }
+
+    html, body {
+      width: 100vw;
+      min-height: 100vh;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      background: #0A1118;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--r);
+      padding: 14px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .menu-item-row {
+      background: #121A21;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .qty-input {
+      width: 65px !important;
+      padding: 6px !important;
+      text-align: center;
+      font-weight: 900;
+      border-color: var(--primary) !important;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 10px;
+      background: #121A21;
+      color: #FFF;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .btn-submit {
+      background: var(--secondary);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      height: 48px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-add {
+      background: var(--primary);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      height: 44px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-cloture {
+      background: var(--secondary);
+      color: #fff;
+      border-radius: 10px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .row-item {
+      background: #121A21;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
+
   <header class="topbar">
     <div style="font-size: 18px; font-weight: 900;">Cuisine & Restaurant</div>
-    <div style="font-size: 12px; color: var(--muted);">Session : {{ user.nom_complet }}</div>
+    <div style="font-size: 12px; color: var(--muted);">Cuisinier : {{ user.nom_complet }}</div>
   </header>
 
   <main class="container">
-    <div class="hero">
-      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #A4D7F8;">Recette Ventes Plats</div>
-      <div style="font-size: 28px; font-weight: 900; color: #FFF; margin-top: 4px;">{{ "{:,.0f}".format(total_ventes|default(0)).replace(',', ' ') }} FC</div>
-      <div style="font-size: 11px; color: #FF8888; margin-top: 2px;">Dépenses totales : {{ "{:,.0f}".format(total_depenses|default(0)).replace(',', ' ') }} FC</div>
+
+    <!-- Bilan financier en temps réel -->
+    <div class="card" style="background: linear-gradient(145deg, #1C2732 0%, #0A1118 100%);">
+      <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; color: var(--muted);">
+        <span>VENTES : <b style="color: #64B5F6;">{{ "{:,.0f}".format(total_ventes).replace(',', ' ') }} FC</b></span>
+        <span>DÉPENSES : <b style="color: #FF8888;">{{ "{:,.0f}".format(total_depenses).replace(',', ' ') }} FC</b></span>
+      </div>
+      <div style="border-top: 1px solid var(--line); padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">BÉNÉFICE NET CUISINE :</span>
+        <span style="font-size: 20px; font-weight: 900; color: {% if benefice_net >= 0 %}#32D785{% else %}#FF8888{% endif %};">
+          {{ "{:,.0f}".format(benefice_net).replace(',', ' ') }} FC
+        </span>
+      </div>
     </div>
 
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Servir un Plat / Combinaison</div>
-    <form action="/cuisine/vendre" method="POST" class="card">
-      <div>
-        <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Description du plat ou Combinaison</label>
-        <input type="text" name="description_plat" required placeholder="ex: Riz + Poulet + Pondu">
+    <!-- 1. Formulaire de composition du plat par Quantité -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Composer & Vendre un Plat (Quantités)</div>
+    
+    <form action="/cuisine/vendre_combinaison" method="POST" class="card">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        {% for m in menu %}
+          <div class="menu-item-row">
+            <div>
+              <div style="font-weight: 800; font-size: 14px;">{{ m.nom }}</div>
+              <div style="font-size: 11px; color: #64B5F6;">{{ "{:,.0f}".format(m.prix).replace(',', ' ') }} FC / {{ m.unite }}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 11px; color: var(--muted);">Qté:</span>
+              <input type="number" name="qty_{{ m.id }}" min="0" value="0" class="qty-input">
+            </div>
+          </div>
+        {% else %}
+          <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 10px;">
+            Aucun élément au menu. Ajoutez vos articles ci-dessous.
+          </div>
+        {% endfor %}
       </div>
-      <div class="grid-2">
-        <div>
-          <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Prix (FC)</label>
-          <input type="number" name="prix_vente" value="5000" required>
-        </div>
-        <div>
-          <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Nombre de plats</label>
-          <input type="number" name="quantite" value="1" required>
-        </div>
-      </div>
-      <button type="submit" class="btn-submit">Enregistrer la Vente</button>
+
+      {% if menu %}
+        <button type="submit" class="btn-submit">VALIDER LA VENTE DU PLAT</button>
+      {% endif %}
     </form>
 
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">2. Enregistrer une Dépense Cuisine</div>
+    <!-- Historique des ventes -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Ventes effectuées aujourd'hui</div>
+    <div class="card">
+      {% for v in ventes %}
+        <div class="row-item">
+          <div>
+            <div style="font-weight: 900; color: #FFF;">🍳 {{ v.plat }}</div>
+            <div style="font-size: 11px; color: var(--muted);">à {{ v.heure }}</div>
+          </div>
+          <span style="font-weight: 900; color: #32D785;">+{{ "{:,.0f}".format(v.montant).replace(',', ' ') }} FC</span>
+        </div>
+      {% else %}
+        <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 6px;">
+          Aucune vente enregistrée.
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- 2. Gestion des Dépenses de la cuisine -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">2. Enregistrer une Dépense (Achats vivres/charbon)</div>
+    
     <form action="/cuisine/depense" method="POST" class="card">
-      <div>
-        <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Motif de la dépense</label>
-        <input type="text" name="description" required placeholder="ex: Achat d'huile, charbon, épices...">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div class="field">
+          <label>Description Dépense</label>
+          <input type="text" name="description" required placeholder="ex: Charbon, Huile, Épices...">
+        </div>
+        <div class="field">
+          <label>Montant (FC)</label>
+          <input type="number" name="montant" required placeholder="ex: 10000">
+        </div>
       </div>
-      <div>
-        <label style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Montant Dépensé (FC)</label>
-        <input type="number" name="montant" value="15000" required>
-      </div>
-      <button type="submit" class="btn-submit" style="background: var(--danger);">Ajouter cette Dépense</button>
+      <button type="submit" class="btn-add" style="background: #D9392B;">ENREGISTRER LA DÉPENSE</button>
     </form>
 
-    <div class="grid-2" style="margin-top: 10px;">
-      <a href="/cloture" class="btn-nav" style="background: var(--secondary);">Clôture Caisse</a>
-      <a href="/logout" class="btn-nav" style="background: var(--danger);">Déconnexion</a>
+    <!-- Historique des Dépenses -->
+    <div class="card">
+      <div style="font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase;">Aperçu des Dépenses</div>
+      {% for d in depenses %}
+        <div class="row-item">
+          <div>
+            <div style="font-weight: 800; color: #FFF;">🛒 {{ d.description }}</div>
+            <div style="font-size: 11px; color: var(--muted);">à {{ d.heure }}</div>
+          </div>
+          <span style="font-weight: 900; color: #FF8888;">-{{ "{:,.0f}".format(d.montant).replace(',', ' ') }} FC</span>
+        </div>
+      {% else %}
+        <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 6px;">
+          Aucune dépense enregistrée.
+        </div>
+      {% endfor %}
     </div>
+
+    <!-- 3. Ajouter un nouvel élément au menu -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">3. Ajouter un Article au Menu</div>
+    
+    <form action="/cuisine/menu/ajouter" method="POST" class="card">
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+        <div class="field">
+          <label>Nom de l'article</label>
+          <input type="text" name="nom" required placeholder="ex: Poulet, Foufou, Makemba...">
+        </div>
+        <div class="field">
+          <label>Unité</label>
+          <select name="unite">
+            <option value="morceau">Morceau</option>
+            <option value="boule">Boule</option>
+            <option value="portion">Portion / g</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Prix Unitaire (FC)</label>
+        <input type="number" name="prix" required placeholder="ex: 5000">
+      </div>
+      <button type="submit" class="btn-add">AJOUTER AU MENU</button>
+    </form>
+
+    <!-- Navigation -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
+      <a href="/cloture" class="btn-cloture">CLÔTURE CAISSE</a>
+      <a href="/logout" style="background: var(--danger); color: #fff; border-radius: 10px; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 900; text-transform: uppercase;">DÉCONNEXION</a>
+    </div>
+
   </main>
+
 </body>
 </html>

@@ -307,11 +307,25 @@ def ajouter_stock_casier(
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- MODULE CUISINE & RESTAURANT ---
+# Menu initial avec unités de mesure (ex: par morceau, par boule, par portion/g)
+DB_CUISINE_MENU = [
+    {"id": "1", "nom": "Cuisse de poulet", "prix": 5000.0, "unite": "morceau"},
+    {"id": "2", "nom": "Poisson grillé", "prix": 10000.0, "unite": "morceau"},
+    {"id": "3", "nom": "Foufou", "prix": 250.0, "unite": "boule"},
+    {"id": "4", "nom": "Makemba", "prix": 500.0, "unite": "portion"},
+    {"id": "5", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
+]
+
 @app.get("/cuisine", response_class=HTMLResponse)
 def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    total_v = sum(v["montant"] for v in DB_CUISINE_VENTES)
+    total_d = sum(d["montant"] for d in DB_CUISINE_DEPENSES)
+    benefice_net = total_v - total_d
+
     return templates.TemplateResponse(
         request=request, 
         name="cuisine.html", 
@@ -319,35 +333,59 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
             "user": user, 
             "menu": DB_CUISINE_MENU,
             "ventes": DB_CUISINE_VENTES,
-            "total_ventes": sum(v["montant"] for v in DB_CUISINE_VENTES), 
-            "total_depenses": sum(d["montant"] for d in DB_CUISINE_DEPENSES), 
-            "depenses": DB_CUISINE_DEPENSES
+            "depenses": DB_CUISINE_DEPENSES,
+            "total_ventes": total_v, 
+            "total_depenses": total_d,
+            "benefice_net": benefice_net
         }
     )
 
 @app.post("/cuisine/menu/ajouter")
-def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), session_token: Optional[str] = Cookie(None)):
+def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str = Form("morceau"), session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    DB_CUISINE_MENU.append({"id": str(uuid.uuid4()), "nom": nom, "prix": prix})
+    
+    DB_CUISINE_MENU.append({
+        "id": str(uuid.uuid4()), 
+        "nom": nom.strip(), 
+        "prix": prix,
+        "unite": unite.strip()
+    })
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.get("/cuisine/vendre/{plat_id}")
-def vendre_plat(plat_id: str, session_token: Optional[str] = Cookie(None)):
+@app.post("/cuisine/vendre_combinaison")
+async def vendre_combinaison(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for item in DB_CUISINE_MENU:
-        if item["id"] == plat_id:
-            heure_vente = datetime.now().strftime("%H:%M:%S")
-            DB_CUISINE_VENTES.insert(0, {
-                "plat": item["nom"],
-                "montant": item["prix"],
-                "heure": heure_vente,
-                "cuisinier": user["nom_complet"]
-            })
-            break
+
+    form_data = await request.form()
+    details_plat = []
+    total_plat = 0.0
+
+    for m in DB_CUISINE_MENU:
+        qty_key = f"qty_{m['id']}"
+        if qty_key in form_data and form_data[qty_key]:
+            try:
+                qty = int(form_data[qty_key])
+                if qty > 0:
+                    sous_total = qty * m["prix"]
+                    total_plat += sous_total
+                    details_plat.append(f"{qty} {m['unite']}(s) {m['nom']}")
+            except ValueError:
+                pass
+
+    if details_plat:
+        description_complet = " + ".join(details_plat)
+        heure_vente = datetime.now().strftime("%H:%M:%S")
+        DB_CUISINE_VENTES.insert(0, {
+            "plat": description_complet,
+            "montant": total_plat,
+            "heure": heure_vente,
+            "cuisinier": user["nom_complet"]
+        })
+
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/cuisine/depense")
@@ -355,9 +393,10 @@ def enregistrer_depense_cuisine(description: str = Form(...), montant: float = F
     user = get_current_user(session_token)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
     heure_depense = datetime.now().strftime("%H:%M:%S")
     DB_CUISINE_DEPENSES.insert(0, {
-        "description": description,
+        "description": description.strip(),
         "montant": montant,
         "heure": heure_depense,
         "cuisinier": user["nom_complet"]
