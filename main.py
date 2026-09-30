@@ -26,9 +26,14 @@ DB_GERANTS = [
     {"id": "cuisine_1", "nom_complet": "Sœur Anne", "role": "cuisinier", "role_label": "Cuisinier", "pin": "2222", "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
 ]
 
-CONFIG_TOILETTES = {"petit_besoin": 500.0, "grand_besoin": 1000.0}
+# CONFIGURATION DES TARIFS INITIALES (Définis par le Super Admin)
+TARIFS_SYSTEME = {
+    "toilettes_petit": 500.0,
+    "toilettes_grand": 1000.0,
+    "flat_heure": 5000.0
+}
 
-# Données actives de la journée en cours
+# Données actives de la journée en cours (repartent à 0 FC à chaque clôture)
 DB_TOILETTES = []
 DB_SEJOURS_FLATS = []
 DB_VENTES_COMPTOIR = []
@@ -36,12 +41,12 @@ DB_CUISINE_VENTES = []
 DB_CUISINE_DEPENSES = []
 
 DB_CHAMBRES = [
-    {"id": "1", "nom": "Ch. 1", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "2", "nom": "Ch. 2", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "3", "nom": "Ch. 3", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "4", "nom": "Ch. 4", "statut": "hors_service", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "5", "nom": "Ch. 5", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "6", "nom": "Ch. 6", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "1", "nom": "Ch. 1", "statut": "libre", "montant_recu": 0.0, "duree": 0},
+    {"id": "2", "nom": "Ch. 2", "statut": "libre", "montant_recu": 0.0, "duree": 0},
+    {"id": "3", "nom": "Ch. 3", "statut": "libre", "montant_recu": 0.0, "duree": 0},
+    {"id": "4", "nom": "Ch. 4", "statut": "hors_service", "montant_recu": 0.0, "duree": 0},
+    {"id": "5", "nom": "Ch. 5", "statut": "libre", "montant_recu": 0.0, "duree": 0},
+    {"id": "6", "nom": "Ch. 6", "statut": "libre", "montant_recu": 0.0, "duree": 0},
 ]
 
 DB_COMPTOIR = [
@@ -131,9 +136,27 @@ def dashboard(request: Request, session_token: Optional[str] = Cookie(None)):
             "total_comptoir": recette_comptoir,
             "total_cuisine": recette_cuisine,
             "etablissements": DB_ETABLISSEMENTS,
-            "clotures": DB_CLOTURES
+            "clotures": DB_CLOTURES,
+            "tarifs": TARIFS_SYSTEME
         }
     )
+
+@app.post("/configuration/tarifs")
+def ajuster_tarifs(
+    toilettes_petit: float = Form(...),
+    toilettes_grand: float = Form(...),
+    flat_heure: float = Form(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    user = get_current_user(session_token)
+    if not user or user["role"] != "super_admin":
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    TARIFS_SYSTEME["toilettes_petit"] = toilettes_petit
+    TARIFS_SYSTEME["toilettes_grand"] = toilettes_grand
+    TARIFS_SYSTEME["flat_heure"] = flat_heure
+
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- ÉTABLISSEMENTS & GÉRANTS ---
 @app.get("/etablissements", response_class=HTMLResponse)
@@ -177,20 +200,30 @@ def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)
     DB_GERANTS = [g for g in DB_GERANTS if not (g["id"] == gerant_id and g["role"] != "super_admin")]
     return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- MODULES MÉTIERS (ISOLÉS PAR HABILITATION) ---
+# --- MODULES MÉTIERS (ISOLÉS PAR HABILITATION & TARIFS INITIALISÉS) ---
 @app.get("/toilettes", response_class=HTMLResponse)
 def toilettes_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="toilettes.html", context={"user": user, "total_toilettes": sum(e["montant"] for e in DB_TOILETTES), "passages": DB_TOILETTES, "tarif_petit": CONFIG_TOILETTES["petit_besoin"], "tarif_grand": CONFIG_TOILETTES["grand_besoin"]})
+    return templates.TemplateResponse(
+        request=request, 
+        name="toilettes.html", 
+        context={
+            "user": user, 
+            "total_toilettes": sum(e["montant"] for e in DB_TOILETTES), 
+            "passages": DB_TOILETTES, 
+            "tarif_petit": TARIFS_SYSTEME["toilettes_petit"], 
+            "tarif_grand": TARIFS_SYSTEME["toilettes_grand"]
+        }
+    )
 
 @app.post("/toilettes/encaisser")
 def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    type_besoin = "Petit besoin" if montant == CONFIG_TOILETTES["petit_besoin"] else "Grand besoin"
+    type_besoin = "Petit besoin" if montant == TARIFS_SYSTEME["toilettes_petit"] else "Grand besoin"
     DB_TOILETTES.append({"id": str(uuid.uuid4()), "montant": montant, "type_besoin": type_besoin, "gerant": user["nom_complet"]})
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -199,7 +232,15 @@ def flats_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
     if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="flats.html", context={"user": user, "chambres": DB_CHAMBRES})
+    return templates.TemplateResponse(
+        request=request, 
+        name="flats.html", 
+        context={
+            "user": user, 
+            "chambres": DB_CHAMBRES, 
+            "tarif_heure": TARIFS_SYSTEME["flat_heure"]
+        }
+    )
 
 @app.post("/flats/occuper")
 def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...), duree: int = Form(...), session_token: Optional[str] = Cookie(None)):
@@ -322,7 +363,7 @@ def ajouter_locataire(nom_complet: str = Form(...), local: str = Form(...), loye
     DB_LOCATAIRES.append({"id": str(uuid.uuid4()), "nom_complet": nom_complet, "local": local, "loyer_mensuel": loyer_mensuel, "enregistre_par": user["nom_complet"]})
     return RedirectResponse(url="/locataires", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- CLÔTURE DE CAISSE ET RÉINITIALISATION ---
+# --- CLÔTURE DE CAISSE ET RÉINITIALISATION AUTOMATIQUE ---
 @app.get("/cloture", response_class=HTMLResponse)
 def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
