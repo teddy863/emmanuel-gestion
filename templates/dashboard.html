@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Emmanuel — Tableau de Bord</title>
+  <title>Emmanuel — Tableau de Bord Super Admin</title>
   <style>
     :root {
       --primary: #0E5C8C;
@@ -146,6 +146,16 @@
       margin-top: 8px;
       padding-bottom: 24px;
     }
+
+    .archive-item {
+      background: #121A21;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
   </style>
 </head>
 <body>
@@ -160,13 +170,13 @@
 
   <main class="container">
 
-    <!-- Recette globale du jour (se remet bien à 0 FC à la clôture) -->
+    <!-- Recette globale du jour (En cours de service) -->
     <div class="hero">
-      <div class="hero-sub">Recette du Jour (Réseau)</div>
+      <div class="hero-sub">Recette Active en Caisse (Réseau)</div>
       <div class="hero-val">{{ "{:,.0f}".format(recette_jour|default(0)).replace(',', ' ') }} FC</div>
     </div>
 
-    <!-- Mini stats par module -->
+    <!-- Mini stats par module en cours -->
     <div class="grid-2">
       <div class="mini-card">
         <div class="mc-title">Toilettes</div>
@@ -186,35 +196,81 @@
       </div>
     </div>
 
-   <!-- Formulaire de Tarification Initiale du Super Admin -->
-<div class="section-title">CONFIGURATION DES PRIX INITIALES</div>
-<form action="/configuration/tarifs" method="POST" class="card-form">
-  <div class="field">
-    <label>Toilettes - Petit besoin (FC)</label>
-    <input type="number" name="toilettes_petit" value="{{ tarifs.toilettes_petit if tarifs else 500 }}" required>
-  </div>
-  <div class="field">
-    <label>Toilettes - Grand besoin (FC)</label>
-    <input type="number" name="toilettes_grand" value="{{ tarifs.toilettes_grand if tarifs else 1000 }}" required>
-  </div>
-  <div class="field">
-    <label>Flats - Prix par Heure (FC)</label>
-    <input type="number" name="flat_heure" value="{{ tarifs.flat_heure if tarifs else 5000 }}" required>
-  </div>
-  <button type="submit" class="btn btn-action" style="min-height: 44px; margin-top: 4px;">
-    METTRE À JOUR LES TARIFS
-  </button>
-</form>
+    <!-- Formulaire de Tarification Initiale du Super Admin -->
+    <div class="section-title">CONFIGURATION DES PRIX INITIALES</div>
+    <form action="/configuration/tarifs" method="POST" class="card-form">
+      <div class="field">
+        <label>Toilettes - Petit besoin (FC)</label>
+        <input type="number" name="toilettes_petit" value="{{ tarifs.toilettes_petit if tarifs else 500 }}" required>
+      </div>
+      <div class="field">
+        <label>Toilettes - Grand besoin (FC)</label>
+        <input type="number" name="toilettes_grand" value="{{ tarifs.toilettes_grand if tarifs else 1000 }}" required>
+      </div>
+      <div class="field">
+        <label>Flats - Prix par Heure (FC)</label>
+        <input type="number" name="flat_heure" value="{{ tarifs.flat_heure if tarifs else 5000 }}" required>
+      </div>
+      <button type="submit" class="btn btn-action" style="min-height: 44px; margin-top: 4px;">
+        METTRE À JOUR LES TARIFS
+      </button>
+    </form>
+
+    <!-- Historique en direct des clôtures d'activités des gérants -->
+    <div class="section-title">RAPPORTS DE CLÔTURES DES GÉRANTS (RÉSEAU)</div>
+    <div class="card-form" style="padding: 12px; gap: 8px;">
+      {% for c in clotures %}
+        <div class="archive-item">
+          <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 900;">
+            <span style="color: #64B5F6;">📅 {{ c.date }} à {{ c.heure }}</span>
+            <span style="color: #32D785;">{{ "{:,.0f}".format(c.montant_compte).replace(',', ' ') }} FC</span>
+          </div>
+          <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">
+            Gérant : <b>{{ c.gerant }}</b> ({{ c.role_label }}) · Attendu : {{ "{:,.0f}".format(c.montant_attendu).replace(',', ' ') }} FC · Écart : <b style="color: {% if c.ecart < 0 %}#FF8888{% else %}#32D785{% endif %};">{{ "{:,.0f}".format(c.ecart).replace(',', ' ') }} FC</b>
+          </div>
+          <div style="font-size: 10px; color: #A4D7F8; margin-top: 2px;">
+            {{ c.detail }}
+          </div>
+        </div>
+      {% else %}
+        <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 8px;">
+          Aucune clôture de gérant enregistrée pour le moment.
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Suivi des dettes enregistrées -->
+    {% if dettes %}
+      <div class="section-title">DETTES ET CRÉDITS EN COURS</div>
+      <div class="card-form" style="padding: 12px; gap: 8px;">
+        {% for d in dettes %}
+          <div class="archive-item">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 900;">
+              <span>👤 {{ d.client_nom }} ({{ d.client_telephone }})</span>
+              <span style="color: {% if d.est_payee %}#32D785{% else %}#FF8888{% endif %};">{{ "{:,.0f}".format(d.montant).replace(',', ' ') }} FC</span>
+            </div>
+            <div style="font-size: 11px; color: var(--muted);">
+              Motif : {{ d.motif }} · Agent : <b>{{ d.gerant }}</b>
+            </div>
+            {% if not d.est_payee %}
+              <a href="/dettes/payer/{{ d.id }}" style="margin-top: 6px; font-size: 11px; color: #32D785; font-weight: 900; text-decoration: none;">✔ RÉSOUDRE / ENCAISSER LA DETTE</a>
+            {% else %}
+              <div style="font-size: 10px; color: #32D785; font-weight: 800;">Payé le {{ d.date_paiement }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
     <!-- Administration -->
     <div class="section-title">ADMINISTRATION SYSTÈME</div>
     <div style="display: flex; flex-direction: column; gap: 10px;">
-      <a href="/gerants" class="btn btn-action">👤 GÉRER LES GÉRANTS & POSTES</a>
-      <a href="/etablissements" class="btn btn-module">🏢 ÉTABLISSEMENT (BANDAL / TCHANGU)</a>
+      <a href="/gerants" class="btn btn-action">👤 GÉRER LES GÉRANTS, SALAIRES & POSTES</a>
+      <a href="/etablissements" class="btn btn-module">🏢 ÉTABLISSEMENTS (BANDAL / TCHANGU)</a>
     </div>
 
     <!-- Accès aux 6 Modules -->
-    <div class="section-title">ACCÈS AUX MODULES</div>
+    <div class="section-title">ACCÈS DIRECT AUX MODULES</div>
     <div class="grid-2">
       <a href="/toilettes" class="btn btn-module">🚻 Toilettes</a>
       <a href="/flats" class="btn btn-module">🏨 Flats</a>
@@ -226,7 +282,7 @@
 
     <!-- Pied de page -->
     <div class="actionbar">
-      <a href="/cloture" class="btn btn-cloture">CLÔTURE CAISSE</a>
+      <a href="/cloture" class="btn btn-cloture">CLÔTURE GLOBAL CAISSE</a>
       <a href="/logout" class="btn btn-danger">QUITTER</a>
     </div>
 
