@@ -11,6 +11,7 @@
       --primary: #0E5C8C;
       --secondary: #1E9E63;
       --danger: #D9392B;
+      --warning: #E67E22;
       --text: #FFFFFF;
       --muted: #8E9BAE;
       --line: #2A3847;
@@ -78,8 +79,8 @@
     }
 
     .chambre-card.hors_service {
-      border-color: var(--muted);
-      opacity: 0.6;
+      border-color: var(--warning);
+      background: #2A1F13;
     }
 
     .chambre-nom { font-weight: 900; font-size: 16px; }
@@ -103,11 +104,40 @@
       color: #fff;
       border: 0;
       border-radius: 10px;
-      height: 44px;
+      height: 40px;
       font-weight: 900;
       text-transform: uppercase;
       cursor: pointer;
       width: 100%;
+    }
+
+    .btn-warning {
+      background: var(--warning);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 6px;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      text-decoration: none;
+      text-align: center;
+      display: block;
+    }
+
+    .btn-activate {
+      background: var(--secondary);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      text-decoration: none;
+      text-align: center;
+      display: block;
+      margin-top: 6px;
     }
 
     .btn-primary {
@@ -147,11 +177,11 @@
 
     <!-- Recette du jour Flats -->
     <div class="card" style="background: linear-gradient(145deg, #0E5C8C 0%, #073450 100%);">
-      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #A4D7F8;">Recette Flats en Caisse</div>
+      <div style="font-size: 11px; font-800; text-transform: uppercase; color: #A4D7F8;">Recette Flats en Caisse</div>
       <div style="font-size: 28px; font-weight: 900; margin-top: 4px;">{{ "{:,.0f}".format(total_flats|default(0)).replace(',', ' ') }} FC</div>
     </div>
 
-    <!-- 1. État des Chambres -->
+    <!-- 1. État des Chambres & Boutons de maintenance -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Chambres & Occupations</div>
     
     <div class="grid-chambres">
@@ -159,8 +189,8 @@
         <div class="chambre-card {% if ch.statut == 'occupee' %}occupee{% elif ch.statut == 'hors_service' %}hors_service{% endif %}">
           <div>
             <div class="chambre-nom">{{ ch.nom }}</div>
-            <div class="chambre-status" style="color: {% if ch.statut == 'libre' %}#32D785{% elif ch.statut == 'occupee' %}#FF8888{% else %}var(--muted){% endif %}; margin-top: 2px;">
-              ● {{ ch.statut }}
+            <div class="chambre-status" style="color: {% if ch.statut == 'libre' %}#32D785{% elif ch.statut == 'occupee' %}#FF8888{% else %}var(--warning){% endif %}; margin-top: 2px;">
+              ● {{ ch.statut|replace('_', ' ') }}
             </div>
           </div>
 
@@ -175,15 +205,28 @@
                 <label>Montant Recu (FC)</label>
                 <input type="number" name="montant_percu" value="{{ ch.prix_par_heure|default(tarif_heure)|int }}" required style="padding: 6px; font-size: 12px;">
               </div>
-              <button type="submit" class="btn-submit" style="height: 36px; font-size: 12px;">OCCUPER</button>
+              <button type="submit" class="btn-submit">OCCUPER</button>
             </form>
+
+            <!-- Bouton pour passer la chambre en maintenance -->
+            <a href="/flats/chambre/statut/{{ ch.id }}/hors_service" class="btn-warning" onclick="return confirm('Mettre {{ ch.nom }} en Hors Service / Travaux ?');" style="margin-top: 4px;">
+              ⚠️ DÉCLARER HORS SERVICE
+            </a>
+
           {% elif ch.statut == 'occupee' %}
             <div style="font-size: 11px; color: #A4D7F8; margin-top: 4px;">
               Occupée pour <b>{{ ch.duree }}h</b><br>Recu : <b>{{ "{:,.0f}".format(ch.montant_recu).replace(',', ' ') }} FC</b>
             </div>
-            <a href="/flats/liberer/{{ ch.id }}" class="btn-submit" style="background: var(--danger); text-decoration: none; height: 36px; font-size: 11px; margin-top: 6px;">LIBÉRER CHAMBRE</a>
+            <a href="/flats/liberer/{{ ch.id }}" class="btn-submit" style="background: var(--danger); text-decoration: none; height: 36px; font-size: 11px; margin-top: 6px; display: flex; align-items: center; justify-content: center;">LIBÉRER CHAMBRE</a>
+
           {% else %}
-            <div style="font-size: 11px; color: var(--muted); text-align: center; margin: 8px 0;">Hors Service</div>
+            <!-- Chambre actuellement Hors Service -->
+            <div style="font-size: 11px; color: var(--warning); text-align: center; margin: 6px 0; font-weight: 800;">
+              🔧 EN RÉNOVATION / TRAVAUX
+            </div>
+            <a href="/flats/chambre/statut/{{ ch.id }}/libre" class="btn-activate">
+              ✔ REMETTRE EN SERVICE
+            </a>
           {% endif %}
         </div>
       {% else %}
@@ -193,7 +236,7 @@
       {% endfor %}
     </div>
 
-    <!-- 2. ESPACE CONFIGURATION SUPER ADMIN (Visible uniquement pour le Super Admin) -->
+    <!-- 2. ESPACE CONFIGURATION SUPER ADMIN -->
     {% if user.role == 'super_admin' %}
       <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: #64B5F6; margin-top: 10px;">
         ⚙️ ESPACE DIRECTION — GÉRER ET RENOMMER LES CHAMBRES

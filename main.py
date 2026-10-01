@@ -422,6 +422,7 @@ def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] 
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- MODULE FLATS & CHAMBRES (DYNAMIQUE) ---
+# --- MODULE FLATS & CHAMBRES (DYNAMIQUE & MAINTENANCE) ---
 @app.get("/flats", response_class=HTMLResponse)
 def flats_page(request: Request, session_token: Optional[str] = Cookie(None)):
     user = get_current_user(session_token)
@@ -438,6 +439,23 @@ def flats_page(request: Request, session_token: Optional[str] = Cookie(None)):
             "total_flats": sum(s["montant"] for s in DB_SEJOURS_FLATS)
         }
     )
+
+@app.get("/flats/chambre/statut/{chambre_id}/{nouveau_statut}")
+def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: Optional[str] = Cookie(None)):
+    user = get_current_user(session_token)
+    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    for ch in DB_CHAMBRES:
+        if ch["id"] == chambre_id:
+            if nouveau_statut in ["libre", "hors_service"]:
+                ch["statut"] = nouveau_statut
+                if nouveau_statut == "hors_service":
+                    ch["montant_recu"] = 0.0
+                    ch["duree"] = 0
+            break
+
+    return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/chambre/creer")
 def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form(None), session_token: Optional[str] = Cookie(None)):
@@ -469,28 +487,6 @@ def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), 
             ch["nom"] = nouveau_nom.strip()
             break
             
-    return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
-
-@app.get("/flats/chambre/supprimer/{chambre_id}")
-def supprimer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
-    global DB_CHAMBRES
-    DB_CHAMBRES = [ch for ch in DB_CHAMBRES if ch["id"] != chambre_id]
-    return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
-@app.get("/flats/liberer/{chambre_id}")
-def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and ch["statut"] == "occupee":
-            ch["statut"] = "libre"
-            ch["montant_recu"] = 0.0
-            ch["duree"] = 0
-            break
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/salle", response_class=HTMLResponse)
