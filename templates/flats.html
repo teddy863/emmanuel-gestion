@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Emmanuel — Flats à l'heure</title>
+  <title>Emmanuel — Gestion des Flats</title>
   <style>
     :root {
       --bg-dark: #121A21;
@@ -16,67 +16,225 @@
       --line: #2A3847;
       --r: 12px;
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100vw; min-height: 100vh; background: var(--bg-dark); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; overflow-y: auto; }
-    .topbar { background: #0A1118; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-    .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .card-room { background: var(--card-bg); border-radius: var(--r); padding: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
-    .card-room.occupee { border-color: var(--danger); background: #2A171A; }
-    input { width: 100%; padding: 8px; background: #121A21; color: #FFF; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
-    .btn-submit { background: var(--secondary); color: #FFF; border: 0; border-radius: 8px; height: 38px; font-weight: 900; font-size: 11px; cursor: pointer; text-transform: uppercase; width: 100%; }
-    .btn-liberer { background: var(--danger); color: #FFF; border: 0; border-radius: 8px; height: 38px; font-weight: 900; font-size: 11px; cursor: pointer; text-transform: uppercase; width: 100%; text-decoration: none; display: flex; align-items: center; justify-content: center; }
-    .btn-nav { height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 900; text-transform: uppercase; color: #fff; width: 100%; }
+
+    html, body {
+      width: 100vw;
+      min-height: 100vh;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      background: #0A1118;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--r);
+      padding: 14px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .grid-chambres {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .chambre-card {
+      background: #121A21;
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .chambre-card.occupee {
+      border-color: var(--danger);
+      background: #2C1414;
+    }
+
+    .chambre-card.hors_service {
+      border-color: var(--muted);
+      opacity: 0.6;
+    }
+
+    .chambre-nom { font-weight: 900; font-size: 16px; }
+    .chambre-status { font-size: 11px; font-weight: 800; text-transform: uppercase; }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 10px;
+      background: #121A21;
+      color: #FFF;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .btn-submit {
+      background: var(--secondary);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      height: 44px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      height: 44px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-cloture {
+      background: var(--secondary);
+      color: #fff;
+      border-radius: 10px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
+
   <header class="topbar">
-    <div style="font-size: 18px; font-weight: 900;">Flats à l'heure</div>
-    <div style="font-size: 12px; color: var(--muted);">Session : {{ user.nom_complet }}</div>
+    <div style="font-size: 18px; font-weight: 900;">Gestion des Flats</div>
+    <div style="font-size: 12px; color: var(--muted);">Session : {{ user.nom_complet }} ({{ user.role_label }})</div>
   </header>
 
   <main class="container">
-    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Gestion de l'occupation</div>
+
+    <!-- Recette du jour Flats -->
+    <div class="card" style="background: linear-gradient(145deg, #0E5C8C 0%, #073450 100%);">
+      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #A4D7F8;">Recette Flats en Caisse</div>
+      <div style="font-size: 28px; font-weight: 900; margin-top: 4px;">{{ "{:,.0f}".format(total_flats|default(0)).replace(',', ' ') }} FC</div>
+    </div>
+
+    <!-- 1. État des Chambres -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Chambres & Occupations</div>
     
-    <div class="grid-2">
+    <div class="grid-chambres">
       {% for ch in chambres %}
-        <div class="card-room {% if ch.statut == 'occupee' %}occupee{% endif %}">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 900; font-size: 15px;">{{ ch.nom }}</span>
-            <span style="font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; background: {% if ch.statut == 'occupee' %}#D9392B{% else %}#1E9E63{% endif %}; color: #FFF;">
-              {% if ch.statut == 'occupee' %}OCCUPÉE{% elif ch.statut == 'libre' %}LIBRE{% else %}HORS SERVICE{% endif %}
-            </span>
+        <div class="chambre-card {% if ch.statut == 'occupee' %}occupee{% elif ch.statut == 'hors_service' %}hors_service{% endif %}">
+          <div>
+            <div class="chambre-nom">{{ ch.nom }}</div>
+            <div class="chambre-status" style="color: {% if ch.statut == 'libre' %}#32D785{% elif ch.statut == 'occupee' %}#FF8888{% else %}var(--muted){% endif %}; margin-top: 2px;">
+              ● {{ ch.statut }}
+            </div>
           </div>
 
           {% if ch.statut == 'libre' %}
-            <form action="/flats/occuper" method="POST" style="display: flex; flex-direction: column; gap: 6px;">
+            <form action="/flats/occuper" method="POST" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
               <input type="hidden" name="chambre_id" value="{{ ch.id }}">
-              <div>
-                <label style="font-size: 9px; color: var(--muted); text-transform: uppercase;">Montant (FC)</label>
-                <input type="number" name="montant_percu" value="10000" required>
+              <div class="field">
+                <label>Durée (Heures)</label>
+                <input type="number" name="duree" value="1" min="1" required style="padding: 6px; font-size: 12px;">
               </div>
-              <div>
-                <label style="font-size: 9px; color: var(--muted); text-transform: uppercase;">Durée (Heures)</label>
-                <input type="number" name="duree" value="2" required>
+              <div class="field">
+                <label>Montant Recu (FC)</label>
+                <input type="number" name="montant_percu" value="{{ ch.prix_par_heure|default(tarif_heure)|int }}" required style="padding: 6px; font-size: 12px;">
               </div>
-              <button type="submit" class="btn-submit">Valider Occupation</button>
+              <button type="submit" class="btn-submit" style="height: 36px; font-size: 12px;">OCCUPER</button>
             </form>
           {% elif ch.statut == 'occupee' %}
-            <div style="font-size: 12px; color: #FF8888; margin: 4px 0;">
-              Occupé : <b>{{ "{:,.0f}".format(ch.montant_recu).replace(',', ' ') }} FC</b> ({{ ch.duree }}h)
+            <div style="font-size: 11px; color: #A4D7F8; margin-top: 4px;">
+              Occupée pour <b>{{ ch.duree }}h</b><br>Recu : <b>{{ "{:,.0f}".format(ch.montant_recu).replace(',', ' ') }} FC</b>
             </div>
-            <a href="/flats/liberer/{{ ch.id }}" class="btn-liberer">Libérer Chambre</a>
+            <a href="/flats/liberer/{{ ch.id }}" class="btn-submit" style="background: var(--danger); text-decoration: none; height: 36px; font-size: 11px; margin-top: 6px;">LIBÉRER CHAMBRE</a>
           {% else %}
-            <div style="font-size: 12px; color: var(--muted); margin: 10px 0; text-align: center;">Chambre Indisponible</div>
+            <div style="font-size: 11px; color: var(--muted); text-align: center; margin: 8px 0;">Hors Service</div>
           {% endif %}
+        </div>
+      {% else %}
+        <div style="grid-column: span 2; text-align: center; color: var(--muted); font-size: 12px; padding: 10px;">
+          Aucune chambre enregistrée.
         </div>
       {% endfor %}
     </div>
 
-    <div class="grid-2" style="margin-top: 10px;">
-      <a href="/cloture" class="btn-nav" style="background: var(--secondary);">Clôture Caisse</a>
-      <a href="/logout" class="btn-nav" style="background: var(--danger);">Déconnexion</a>
+    <!-- 2. ESPACE CONFIGURATION SUPER ADMIN (Visible uniquement pour le Super Admin) -->
+    {% if user.role == 'super_admin' %}
+      <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: #64B5F6; margin-top: 10px;">
+        ⚙️ ESPACE DIRECTION — GÉRER ET RENOMMER LES CHAMBRES
+      </div>
+
+      <!-- Ajouter une nouvelle chambre -->
+      <form action="/flats/chambre/creer" method="POST" class="card">
+        <div style="font-size: 12px; font-weight: 900; color: var(--muted); text-transform: uppercase;">1. Ajouter une Nouvelle Chambre</div>
+        <div class="field">
+          <label>Nom de la Chambre</label>
+          <input type="text" name="nom" required placeholder="ex: Chambre VIP 1, Suite Deluxe...">
+        </div>
+        <button type="submit" class="btn-primary">CRÉER LA CHAMBRE</button>
+      </form>
+
+      <!-- Renommer une chambre existante -->
+      <form action="/flats/chambre/modifier" method="POST" class="card">
+        <div style="font-size: 12px; font-weight: 900; color: var(--muted); text-transform: uppercase;">2. Renommer une Chambre Existante</div>
+        <div class="field">
+          <label>Sélectionner la Chambre</label>
+          <select name="chambre_id" required>
+            {% for ch in chambres %}
+              <option value="{{ ch.id }}">{{ ch.nom }} (Actuel)</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Nouveau Nom</label>
+          <input type="text" name="nouveau_nom" required placeholder="ex: Chambre Présidentielle">
+        </div>
+        <button type="submit" class="btn-primary" style="background: #073450; border: 1px solid var(--primary);">RENOMMER LA CHAMBRE</button>
+      </form>
+    {% endif %}
+
+    <!-- Navigation -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+      <a href="/cloture" class="btn-cloture">CLÔTURE CAISSE</a>
+      <a href="/logout" style="background: var(--danger); color: #fff; border-radius: 10px; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 900; text-transform: uppercase;">DÉCONNEXION</a>
     </div>
+
   </main>
+
 </body>
 </html>
