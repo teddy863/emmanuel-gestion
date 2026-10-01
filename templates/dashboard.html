@@ -196,25 +196,7 @@
       </div>
     </div>
 
-    <!-- Formulaire de Tarification Initiale du Super Admin -->
-    <div class="section-title">CONFIGURATION DES PRIX INITIALES</div>
-    <form action="/configuration/tarifs" method="POST" class="card-form">
-      <div class="field">
-        <label>Toilettes - Petit besoin (FC)</label>
-        <input type="number" name="toilettes_petit" value="{{ tarifs.toilettes_petit if tarifs else 500 }}" required>
-      </div>
-      <div class="field">
-        <label>Toilettes - Grand besoin (FC)</label>
-        <input type="number" name="toilettes_grand" value="{{ tarifs.toilettes_grand if tarifs else 1000 }}" required>
-      </div>
-      <div class="field">
-        <label>Flats - Prix par Heure (FC)</label>
-        <input type="number" name="flat_heure" value="{{ tarifs.flat_heure if tarifs else 5000 }}" required>
-      </div>
-      <button type="submit" class="btn btn-action" style="min-height: 44px; margin-top: 4px;">
-        METTRE À JOUR LES TARIFS
-      </button>
-    </form>
+    
 
     <!-- Historique en direct des clôtures d'activités des gérants -->
     <div class="section-title">RAPPORTS DE CLÔTURES DES GÉRANTS (RÉSEAU)</div>
