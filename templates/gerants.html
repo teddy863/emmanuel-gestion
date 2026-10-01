@@ -175,27 +175,16 @@
       </div>
 
       <div class="field">
-        <label>Poste / Rôle affecté</label>
-        <div class="radio-group">
-          <label class="radio-option">
-            <input type="radio" name="role" value="gerant_toilettes" checked>
-            <span>Gérant Toilettes</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="role" value="gerant_flats">
-            <span>Gérant Flats</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="role" value="gerant_comptoir">
-            <span>Gérant Comptoir</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="role" value="cuisinier">
-            <span>Cuisinier / Restaurant</span>
-          </label>
-        </div>
-      </div>
-
+  <label>Rôle / Affectation Module</label>
+  <select name="role" required>
+    <option value="gerant_toilettes">Gérant Toilettes</option>
+    <option value="gerant_flats">Gérant Flats</option>
+    <option value="gerant_comptoir">Gérant Comptoir</option>
+    <option value="cuisinier">Cuisinier / Restaurant</option>
+    <option value="gerant_salle">Gérant Salle de Fêtes</option>
+    <option value="gerant_locataires">Gérant Locataires</option>
+  </select>
+</div>
       <button type="submit" class="btn-submit">GÉNÉRER LE COMPTE & PIN</button>
     </form>
 
