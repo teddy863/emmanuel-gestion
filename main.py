@@ -630,3 +630,182 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         name="cloture.html", 
         context={"user": user, "total_attendu": 0.0, "clotures": mes_clotures, "message": f"Service clôturé avec succès ! Recette ({montant_compte:,.0f} FC) envoyée aux archives de la direction."}
     )
+
+# ==============================================================================
+#                 NOUVELLES ROUTES SAAS & ESPACE FONDATEUR
+# ==============================================================================
+
+import random
+from services.email_service import envoyer_code_otp_email
+
+# Stockage temporaire des codes OTP d'inscription
+DB_OTP_TEMP = {}
+
+# --- INSCRIPTION CLIENT SAAS ---
+@app.get("/register", response_class=HTMLResponse)
+def register_page(request: Request):
+    return templates.TemplateResponse(request=request, name="register.html")
+
+@app.post("/register")
+def register_client(
+    request: Request,
+    nom_entreprise: str = Form(...),
+    nom_proprietaire: str = Form(...),
+    email: str = Form(...),
+    telephone: str = Form(...),
+    pin: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    email_clean = email.strip().lower()
+    existant = db.query(models.Organisation).filter(models.Organisation.email == email_clean).first()
+    if existant:
+        return templates.TemplateResponse(
+            request=request, 
+            name="register.html", 
+            context={"error": "Cet e-mail est déjà utilisé par un autre établissement."}
+        )
+
+    code_otp = str(random.randint(100000, 999999))
+    
+    DB_OTP_TEMP[email_clean] = {
+        "code": code_otp,
+        "expire": datetime.utcnow() + timedelta(minutes=15),
+        "nom_entreprise": nom_entreprise.strip(),
+        "nom_proprietaire": nom_proprietaire.strip(),
+        "telephone": telephone.strip(),
+        "pin": pin.strip()
+    }
+
+    envoyer_code_otp_email(email_clean, code_otp, nom_entreprise.strip())
+
+    return RedirectResponse(url=f"/verify-otp?email={email_clean}", status_code=status.HTTP_303_SEE_OTHER)
+
+@app.get("/verify-otp", response_class=HTMLResponse)
+def page_verify_otp(request: Request, email: str):
+    return HTMLResponse(f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Vérification Code OTP</title>
+        <style>
+            body {{ background: #121A21; color: #FFF; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }}
+            .card {{ background: #1C2732; padding: 25px; border-radius: 12px; width: 100%; max-width: 380px; text-align: center; border: 1px solid #2A3847; }}
+            input {{ width: 100%; padding: 12px; margin: 15px 0; background: #121A21; border: 1px solid #2A3847; color: #FFF; border-radius: 8px; text-align: center; font-size: 1.5em; letter-spacing: 5px; box-sizing: border-box; }}
+            button {{ background: #0077B6; color: #FFF; border: 0; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Vérification E-mail</h2>
+            <p>Entrez le code à 6 chiffres envoyé à<br><strong>{email}</strong></p>
+            <form action="/verify-otp" method="POST">
+                <input type="hidden" name="email" value="{email}">
+                <input type="text" name="code" maxlength="6" required placeholder="000000" autofocus>
+                <button type="submit">VALIDER ET ACTIVER MON COMPTE</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """)
+
+@app.post("/verify-otp")
+def valider_otp(
+    email: str = Form(...),
+    code: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    email_clean = email.strip().lower()
+    if email_clean not in DB_OTP_TEMP:
+        raise HTTPException(status_code=400, detail="Session expirée ou invalide.")
+
+    data = DB_OTP_TEMP[email_clean]
+
+    if datetime.utcnow() > data["expire"]:
+        del DB_OTP_TEMP[email_clean]
+        raise HTTPException(status_code=400, detail="Le code OTP a expiré.")
+
+    if data["code"] != code.strip():
+        raise HTTPException(status_code=400, detail="Code OTP incorrect.")
+
+    nouvelle_org = models.Organisation(
+        nom_entreprise=data["nom_entreprise"],
+        nom_proprietaire=data["nom_proprietaire"],
+        email=email_clean,
+        telephone=data["telephone"],
+        est_active=True,
+        est_en_essai=True
+    )
+    db.add(nouvelle_org)
+    db.commit()
+    db.refresh(nouvelle_org)
+
+    nouvel_etablissement = models.Etablissement(
+        organisation_id=nouvelle_org.id,
+        nom=data["nom_entreprise"],
+        est_actif=True
+    )
+    db.add(nouvel_etablissement)
+    db.commit()
+    db.refresh(nouvel_etablissement)
+
+    admin_user = models.Utilisateur(
+        nom_complet=data["nom_proprietaire"],
+        role="super_admin",
+        role_label="Propriétaire / Admin",
+        pin=data["pin"],
+        est_actif=True,
+        etablissement_id=nouvel_etablissement.id
+    )
+    db.add(admin_user)
+    db.commit()
+
+    del DB_OTP_TEMP[email_clean]
+
+    return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
+
+# --- ESPACE FONDATEUR (ADMIN PLATEFORME SAAS) ---
+@app.get("/admin/plateforme", response_class=HTMLResponse)
+def espace_fondateur(
+    request: Request, 
+    session_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(session_token, db)
+    if not user or user.role != "super_admin_fondateur":
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    organisations = db.query(models.Organisation).all()
+    total_orgs = len(organisations)
+    actifs = len([o for o in organisations if o.est_active and not o.est_en_essai])
+    en_essai = len([o for o in organisations if o.est_en_essai])
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_plateforme.html",
+        context={
+            "user": user,
+            "organisations": organisations,
+            "total_organisations": total_orgs,
+            "abonnements_actifs": actifs,
+            "en_essai": en_essai
+        }
+    )
+
+@app.get("/admin/plateforme/toggle/{org_id}")
+def changer_statut_organisation(
+    org_id: str, 
+    session_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(session_token, db)
+    if not user or user.role != "super_admin_fondateur":
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    org = db.query(models.Organisation).filter(models.Organisation.id == org_id).first()
+    if org:
+        org.est_active = not org.est_active
+        db.commit()
+
+    return RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
