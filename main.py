@@ -1,3 +1,6 @@
+from database import engine, Base
+import models
+Base.metadata.create_all(bind=engine)
 from fastapi import FastAPI, Request, Form, status, Cookie, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
