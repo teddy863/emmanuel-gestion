@@ -4,13 +4,30 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
+# --- CLIENT SAAS (ORGANISATION) ---
+class Organisation(Base):
+    __tablename__ = "organisations"
+
+    id = Column(String, primary_primary_key=True if False else True, primary_key=True, default=lambda: str(uuid.uuid4()))
+    nom_entreprise = Column(String, nullable=False) # ex: "Complexe Le Palmier"
+    nom_proprietaire = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    telephone = Column(String, nullable=True)
+    est_active = Column(Boolean, default=True)
+    est_en_essai = Column(Boolean, default=True)
+    date_creation = Column(DateTime, default=datetime.utcnow)
+
+    etablissements = relationship("Etablissement", back_populates="organisation")
+
 class Etablissement(Base):
     __tablename__ = "etablissements"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organisation_id = Column(String, ForeignKey("organisations.id"), nullable=True) # Rattaché à l'organisation client
     nom = Column(String, nullable=False)  # ex: "Emmanuel - Bandal", "Emmanuel - Tchangu"
     est_actif = Column(Boolean, default=True)
 
+    organisation = relationship("Organisation", back_populates="etablissements")
     utilisateurs = relationship("Utilisateur", back_populates="etablissement")
     chambres = relationship("Chambre", back_populates="etablissement")
     produits = relationship("Produit", back_populates="etablissement")
@@ -21,11 +38,13 @@ class Utilisateur(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     nom_complet = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # super_admin, gerant_toilettes, gerant_flats, gerant_comptoir, cuisinier
+    # super_admin_fondateur, super_admin, gerant_toilettes, gerant_flats, gerant_comptoir, cuisinier, gerant_salle, gerant_locataires
+    role = Column(String, nullable=False)  
     role_label = Column(String, nullable=False)
     pin = Column(String, nullable=False)
+    salaire = Column(Float, default=0.0)
     est_actif = Column(Boolean, default=True)
-    etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=True)  # None pour le Super Admin global
+    etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=True)
 
     etablissement = relationship("Etablissement", back_populates="utilisateurs")
 
@@ -59,7 +78,7 @@ class Vente(Base):
     __tablename__ = "ventes"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    module = Column(String, nullable=False)  # toilettes, flats, comptoir, cuisine
+    module = Column(String, nullable=False)  # toilettes, flats, comptoir, cuisine, salle, locataires
     description = Column(String, nullable=False)
     quantite = Column(Integer, default=1)
     montant = Column(Float, nullable=False)
