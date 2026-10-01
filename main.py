@@ -1,3 +1,9 @@
+from database import engine, Base, get_db
+from sqlalchemy.orm import Session
+import models
+import crud
+# Création automatique des tables sur Supabase au démarrage
+Base.metadata.create_all(bind=engine)
 from database import engine, Base
 import models
 Base.metadata.create_all(bind=engine)
@@ -81,17 +87,21 @@ ROLES_LABELS = {
     "gerant_locataires": "Gérant Locataires"
 }
 
-def get_current_user(session_token: Optional[str]):
+def get_current_user(session_token: Optional[str], db: Session):
     if not session_token:
         return None
     payload = decode_access_token(session_token)
     if not payload:
         return None
     user_id = payload.get("sub")
-    for g in DB_GERANTS:
-        if g["id"] == user_id and g["est_actif"]:
-            return g
-    return None
+    
+    # Recherche directe dans la base de données Supabase
+    user = db.query(models.Utilisateur).filter(
+        models.Utilisateur.id == user_id, 
+        models.Utilisateur.est_actif == True
+    ).first()
+    
+    return user
 
 # --- AUTHENTIFICATION ---
 @app.get("/", response_class=HTMLResponse)
