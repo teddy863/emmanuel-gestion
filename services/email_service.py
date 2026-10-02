@@ -4,7 +4,12 @@ from email.mime.multipart import MIMEMultipart
 import os
 
 def envoyer_code_otp_email(destinataire_email: str, code_otp: str, nom_etablissement: str):
-    # Configuration SMTP gratuite (Gmail ou autre serveur SMTP gratuit)
+    # 1. AFFICHER TOUJOURS LE CODE DANS LES LOGS RENDER (Permet de tester immédiatement)
+    print("========================================", flush=True)
+    print(f"=== CODE OTP GÉNÉRÉ POUR {destinataire_email} : {code_otp} ===", flush=True)
+    print("========================================", flush=True)
+
+    # 2. tentative d'envoi SMTP classique
     smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", 587))
     sender_email = os.getenv("SENDER_EMAIL", "votre_email_saas@gmail.com")
@@ -32,12 +37,13 @@ def envoyer_code_otp_email(destinataire_email: str, code_otp: str, nom_etablisse
     msg.attach(MIMEText(corps, 'plain'))
 
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        server = smtplib.SMTP(smtp_server, smtp_port, timeout=5)
         server.starttls()
         server.login(sender_email, sender_password)
         server.sendmail(sender_email, destinataire_email, msg.as_string())
         server.quit()
         return True
     except Exception as e:
-        print(f"Erreur d'envoi e-mail (Mode fallback activé) : {e}")
+        # En cas d'erreur réseau Render (Network is unreachable), le code s'est quand même affiché dans les logs plus haut
+        print(f"Erreur d'envoi e-mail (Mode fallback activé) : {e}", flush=True)
         return False
