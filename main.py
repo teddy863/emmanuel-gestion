@@ -754,8 +754,9 @@ def valider_otp(
 
     if email_clean not in DB_OTP_TEMP:
         return templates.TemplateResponse(
-            template_name,
-            {"request": request, "email": email_clean, "error": "Session expirée ou invalide. Veuillez réessayer."}
+            request=request,
+            name=template_name,
+            context={"email": email_clean, "error": "Session expirée ou invalide. Veuillez réessayer."}
         )
 
     data = DB_OTP_TEMP[email_clean]
@@ -763,14 +764,16 @@ def valider_otp(
     if datetime.utcnow() > data["expire"]:
         del DB_OTP_TEMP[email_clean]
         return templates.TemplateResponse(
-            template_name,
-            {"request": request, "email": email_clean, "error": "Le code OTP a expiré."}
+            request=request,
+            name=template_name,
+            context={"email": email_clean, "error": "Le code OTP a expiré."}
         )
 
     if data["code"] != code.strip():
         return templates.TemplateResponse(
-            template_name,
-            {"request": request, "email": email_clean, "error": "Code OTP incorrect."}
+            request=request,
+            name=template_name,
+            context={"email": email_clean, "error": "Code OTP incorrect."}
         )
 
     try:
@@ -799,7 +802,7 @@ def valider_otp(
         db.commit()
         db.refresh(nouvel_etablissement)
 
-        # 3. Enregistrement Administrateur / Propriétaire
+        # 3. Enregistrement Utilisateur Admin
         admin_user = models.Utilisateur(
             nom_complet=data["nom_proprietaire"],
             role="super_admin",
@@ -823,8 +826,9 @@ def valider_otp(
         error_msg = "Cet e-mail est déjà utilisé." if "organisations_email_key" in str(e) else f"Erreur BDD : {e}"
 
         return templates.TemplateResponse(
-            template_name,
-            {"request": request, "email": email_clean, "error": error_msg}
+            request=request,
+            name=template_name,
+            context={"email": email_clean, "error": error_msg}
         )
     
 @app.get("/admin/plateforme/toggle/{org_id}")
