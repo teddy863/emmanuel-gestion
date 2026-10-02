@@ -1,8 +1,10 @@
 fastapi
-uvicorn
+uvicorn[standard]
 jinja2
 python-multipart
 sqlalchemy
 psycopg2-binary
 pyjwt
-passlib
+passlib[argon2]
+python-jose[cryptography]
+requests
