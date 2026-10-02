@@ -744,24 +744,39 @@ def page_verify_otp(request: Request, email: str):
 
 @app.post("/verify-otp")
 def valider_otp(
+    request: Request,
     email: str = Form(...),
     code: str = Form(...),
     db: Session = Depends(get_db)
 ):
     email_clean = email.strip().lower()
+
     if email_clean not in DB_OTP_TEMP:
-        raise HTTPException(status_code=400, detail="Session expirée ou invalide.")
+        return templates.TemplateResponse("verify_otp.html", {
+            "request": request,
+            "email": email_clean,
+            "error": "Session expirée ou invalide. Veuillez recommencer l'inscription."
+        })
 
     data = DB_OTP_TEMP[email_clean]
 
     if datetime.utcnow() > data["expire"]:
         del DB_OTP_TEMP[email_clean]
-        raise HTTPException(status_code=400, detail="Le code OTP a expiré.")
+        return templates.TemplateResponse("verify_otp.html", {
+            "request": request,
+            "email": email_clean,
+            "error": "Le code OTP a expiré. Veuillez refaire une demande."
+        })
 
     if data["code"] != code.strip():
-        raise HTTPException(status_code=400, detail="Code OTP incorrect.")
+        return templates.TemplateResponse("verify_otp.html", {
+            "request": request,
+            "email": email_clean,
+            "error": "Code OTP incorrect."
+        })
 
     try:
+        # 1. Organisation
         nouvelle_org = models.Organisation(
             nom_entreprise=data["nom_entreprise"],
             nom_proprietaire=data["nom_proprietaire"],
@@ -774,15 +789,19 @@ def valider_otp(
         db.commit()
         db.refresh(nouvelle_org)
 
+        # 2. Établissement (Vérifiez si dans votre models.py c'est nom ou nom_data)
+        nom_etab = getattr(data, "nom_entreprise", data["nom_entreprise"])
         nouvel_etablissement = models.Etablissement(
             organisation_id=nouvelle_org.id,
-            nom=data["nom_entreprise"],
+            nom_data=nom_etab if hasattr(models.Etablissement, 'nom_data') else None,
+            nom=nom_etab if hasattr(models.Etablissement, 'nom') else None,
             est_actif=True
         )
         db.add(nouvel_etablissement)
         db.commit()
         db.refresh(nouvel_etablissement)
 
+        # 3. Administrateur / Propriétaire
         admin_user = models.Utilisateur(
             nom_complet=data["nom_proprietaire"],
             role="super_admin",
@@ -793,13 +812,23 @@ def valider_otp(
         )
         db.add(admin_user)
         db.commit()
+
+        # SUPPRESSION DU CODE TEMPORAIRE SEULEMENT SI TOUT A RÉUSSI EN BDD
+        del DB_OTP_TEMP[email_clean]
+
+        return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
+
     except Exception as e:
-        print(f"Erreur enregistrement DB: {e}")
+        db.rollback()
+        print("========================================", flush=True)
+        print(f"=== ERREUR CRITIQUE SUPABASE : {e} ===", flush=True)
+        print("========================================", flush=True)
 
-    del DB_OTP_TEMP[email_clean]
-
-    return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
-
+        return templates.TemplateResponse("verify_otp.html", {
+            "request": request,
+            "email": email_clean,
+            "error": f"Erreur d'enregistrement dans la base de données : {e}"
+        })
 @app.get("/admin/plateforme", response_class=HTMLResponse)
 def espace_fondateur(
     request: Request, 
