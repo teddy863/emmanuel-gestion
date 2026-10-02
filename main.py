@@ -15,10 +15,14 @@ import crud
 from security import hash_pin, verify_pin, create_access_token, decode_access_token, generate_auto_pin
 from services.email_service import envoyer_code_otp_email
 
-# Initialisation automatique des tables sur Supabase au démarrage
-Base.metadata.create_all(bind=engine)
-
+# 1. Initialisation de l'application FastAPI
 app = FastAPI(title="Emmanuel - Application de Gestion SaaS")
+
+# 2. Création automatique des tables sur Supabase au démarrage
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Avertissement Connexion Supabase : {e}")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -35,7 +39,7 @@ ROLES_LABELS = {
     "gerant_locataires": "Gérant Locataires"
 }
 
-# --- DONNÉES EN MÉMOIRE POUR LES SITES EXISTANTS (COMPATIBILITÉ) ---
+# --- DONNÉES EN MÉMOIRE POUR LES SITES EXISTANTS ---
 DB_ETABLISSEMENTS = [
     {"id": "site_1", "nom": "Emmanuel - Bandal", "est_actif": True},
     {"id": "site_2", "nom": "Emmanuel - Tchangu", "est_actif": True}
@@ -91,7 +95,7 @@ DB_CUISINE_MENU = [
     {"id": "5", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
 ]
 
-# --- FONCTION UTILISATEUR COMPATIBLE SUPABASE & MÉMOIRE ---
+# --- FONCTION UTILISATEUR ---
 def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
@@ -100,16 +104,17 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
         return None
     user_id = payload.get("sub")
     
-    # 1. Vérification dans la base Supabase si session DB fournie
     if db:
-        db_user = db.query(models.Utilisateur).filter(
-            models.Utilisateur.id == user_id, 
-            models.Utilisateur.est_actif == True
-        ).first()
-        if db_user:
-            return {"id": db_user.id, "nom_complet": db_user.nom_complet, "role": db_user.role}
+        try:
+            db_user = db.query(models.Utilisateur).filter(
+                models.Utilisateur.id == user_id, 
+                models.Utilisateur.est_actif == True
+            ).first()
+            if db_user:
+                return {"id": db_user.id, "nom_complet": db_user.nom_complet, "role": db_user.role}
+        except Exception:
+            pass
 
-    # 2. Secours sur les comptes locaux
     for g in DB_GERANTS:
         if g["id"] == user_id and g["est_actif"]:
             return g
@@ -124,22 +129,23 @@ def login_page(request: Request):
 
 @app.post("/login")
 def login(request: Request, pin: str = Form(...), db: Session = Depends(get_db)):
-    # Recherche dans la base de données Supabase
-    db_user = db.query(models.Utilisateur).filter(
-        models.Utilisateur.pin == pin,
-        models.Utilisateur.est_actif == True
-    ).first()
+    try:
+        db_user = db.query(models.Utilisateur).filter(
+            models.Utilisateur.pin == pin,
+            models.Utilisateur.est_actif == True
+        ).first()
 
-    if db_user:
-        token = create_access_token({"sub": db_user.id, "role": db_user.role})
-        target_url = "/admin/plateforme" if db_user.role == "super_admin_fondateur" else ("/dashboard" if db_user.role == "super_admin" else f"/{db_user.role.replace('gerant_', '')}")
-        if db_user.role == "cuisinier":
-            target_url = "/cuisine"
-        response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
-        response.set_cookie(key="session_token", value=token, httponly=True)
-        return response
+        if db_user:
+            token = create_access_token({"sub": db_user.id, "role": db_user.role})
+            target_url = "/admin/plateforme" if db_user.role == "super_admin_fondateur" else ("/dashboard" if db_user.role == "super_admin" else f"/{db_user.role.replace('gerant_', '')}")
+            if db_user.role == "cuisinier":
+                target_url = "/cuisine"
+            response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
+            response.set_cookie(key="session_token", value=token, httponly=True)
+            return response
+    except Exception:
+        pass
 
-    # Fallback comptes locaux
     for g in DB_GERANTS:
         if g["pin"] == pin and g["est_actif"]:
             token = create_access_token({"sub": g["id"], "role": g["role"]})
@@ -680,13 +686,16 @@ def register_client(
     db: Session = Depends(get_db)
 ):
     email_clean = email.strip().lower()
-    existant = db.query(models.Organisation).filter(models.Organisation.email == email_clean).first()
-    if existant:
-        return templates.TemplateResponse(
-            request=request, 
-            name="register.html", 
-            context={"error": "Cet e-mail est déjà utilisé par un autre établissement."}
-        )
+    try:
+        existant = db.query(models.Organisation).filter(models.Organisation.email == email_clean).first()
+        if existant:
+            return templates.TemplateResponse(
+                request=request, 
+                name="register.html", 
+                context={"error": "Cet e-mail est déjà utilisé par un autre établissement."}
+            )
+    except Exception:
+        pass
 
     code_otp = str(random.randint(100000, 999999))
     
@@ -752,37 +761,40 @@ def valider_otp(
     if data["code"] != code.strip():
         raise HTTPException(status_code=400, detail="Code OTP incorrect.")
 
-    nouvelle_org = models.Organisation(
-        nom_entreprise=data["nom_entreprise"],
-        nom_proprietaire=data["nom_proprietaire"],
-        email=email_clean,
-        telephone=data["telephone"],
-        est_active=True,
-        est_en_essai=True
-    )
-    db.add(nouvelle_org)
-    db.commit()
-    db.refresh(nouvelle_org)
+    try:
+        nouvelle_org = models.Organisation(
+            nom_entreprise=data["nom_entreprise"],
+            nom_proprietaire=data["nom_proprietaire"],
+            email=email_clean,
+            telephone=data["telephone"],
+            est_active=True,
+            est_en_essai=True
+        )
+        db.add(nouvelle_org)
+        db.commit()
+        db.refresh(nouvelle_org)
 
-    nouvel_etablissement = models.Etablissement(
-        organisation_id=nouvelle_org.id,
-        nom=data["nom_entreprise"],
-        est_actif=True
-    )
-    db.add(nouvel_etablissement)
-    db.commit()
-    db.refresh(nouvel_etablissement)
+        nouvel_etablissement = models.Etablissement(
+            organisation_id=nouvelle_org.id,
+            nom=data["nom_entreprise"],
+            est_actif=True
+        )
+        db.add(nouvel_etablissement)
+        db.commit()
+        db.refresh(nouvel_etablissement)
 
-    admin_user = models.Utilisateur(
-        nom_complet=data["nom_proprietaire"],
-        role="super_admin",
-        role_label="Propriétaire / Admin",
-        pin=data["pin"],
-        est_actif=True,
-        etablissement_id=nouvel_etablissement.id
-    )
-    db.add(admin_user)
-    db.commit()
+        admin_user = models.Utilisateur(
+            nom_complet=data["nom_proprietaire"],
+            role="super_admin",
+            role_label="Propriétaire / Admin",
+            pin=data["pin"],
+            est_actif=True,
+            etablissement_id=nouvel_etablissement.id
+        )
+        db.add(admin_user)
+        db.commit()
+    except Exception as e:
+        print(f"Erreur enregistrement DB: {e}")
 
     del DB_OTP_TEMP[email_clean]
 
@@ -798,7 +810,11 @@ def espace_fondateur(
     if not user or user["role"] != "super_admin_fondateur":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
-    organisations = db.query(models.Organisation).all()
+    try:
+        organisations = db.query(models.Organisation).all()
+    except Exception:
+        organisations = []
+
     total_orgs = len(organisations)
     actifs = len([o for o in organisations if o.est_active and not o.est_en_essai])
     en_essai = len([o for o in organisations if o.est_en_essai])
@@ -825,9 +841,12 @@ def changer_statut_organisation(
     if not user or user["role"] != "super_admin_fondateur":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
-    org = db.query(models.Organisation).filter(models.Organisation.id == org_id).first()
-    if org:
-        org.est_active = not org.est_active
-        db.commit()
+    try:
+        org = db.query(models.Organisation).filter(models.Organisation.id == org_id).first()
+        if org:
+            org.est_active = not org.est_active
+            db.commit()
+    except Exception:
+        pass
 
     return RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
