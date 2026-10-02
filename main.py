@@ -195,37 +195,62 @@ def login(
 
 # --- TABLEAU DE BORD SUPER ADMIN ---
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+def dashboard(
+    request: Request, 
+    session_token: Optional[str] = Cookie(None), 
+    db: Session = Depends(get_db)
+):
     user = None
-    
-    # 1. Tentative de récupération via get_current_user
-    if session_token:
-        try:
-            user = get_current_user(session_token, db)
-        except Exception as e:
-            print(f"Erreur get_current_user : {e}", flush=True)
 
-    # 2. Secours si session_token existe mais get_current_user renvoie None ou plante
-    if not user and session_token:
+    # 1. Récupération du token depuis les cookies ou l'en-tête
+    token_str = session_token or request.cookies.get("session_token")
+
+    if token_str:
+        # Si le token a été stocké sous forme de dictionnaire ou string
+        if isinstance(token_str, dict):
+            token_str = token_str.get("access_token") or token_str.get("session_token")
+
+        # 2. Décodage manuel sécurisé du JWT
         try:
-            payload = jwt.decode(session_token, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = jwt.decode(token_str, SECRET_KEY, algorithms=[ALGORITHM])
             user_id = payload.get("sub")
             role = payload.get("role", "super_admin")
-            user = {"id": user_id, "nom_complet": "Administrateur", "role": role}
-        except Exception:
-            pass
 
-    # 3. Si aucune session valide n'est trouvée, redirection vers /login
+            # Recherche dans Supabase si présent
+            if db and str(user_id) != "0000":
+                try:
+                    db_user = db.query(models.Utilisateur).filter(models.Utilisateur.id == user_id).first()
+                    if db_user:
+                        user = {
+                            "id": db_user.id,
+                            "nom_complet": db_user.nom_complet,
+                            "role": db_user.role
+                        }
+                except Exception as db_err:
+                    print(f"Erreur DB dashboard: {db_err}", flush=True)
+
+            # Fallback (Compte Fondateur 0000 ou utilisateur local)
+            if not user:
+                user = {
+                    "id": user_id or "admin",
+                    "nom_complet": "Propriétaire / Admin",
+                    "role": role
+                }
+
+        except Exception as jwt_err:
+            print(f"=== ERREUR DECODAGE JWT DASHBOARD : {jwt_err} ===", flush=True)
+
+    # 3. Si aucune session valide n'a pu être reconstruite, retour au login
     if not user:
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # 4. Calculs des recettes et préparation du dashboard
-    recette_toilettes = sum(e["montant"] for e in DB_TOILETTES)
-    recette_flats = sum(s["montant"] for s in DB_SEJOURS_FLATS)
-    recette_comptoir = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
-    recette_cuisine = sum(v["montant"] for v in DB_CUISINE_VENTES)
-    recette_salle = sum(r["montant"] for r in DB_SALLE_FETES)
-    recette_locataires = sum(l["montant"] for l in DB_LOCATAIRES)
+    # 4. Calculs des recettes et rendu de la page
+    recette_toilettes = sum(e.get("montant", 0) for e in DB_TOILETTES)
+    recette_flats = sum(s.get("montant", 0) for s in DB_SEJOURS_FLATS)
+    recette_comptoir = sum(v.get("montant", 0) for v in DB_VENTES_COMPTOIR)
+    recette_cuisine = sum(v.get("montant", 0) for v in DB_CUISINE_VENTES)
+    recette_salle = sum(r.get("montant", 0) for r in DB_SALLE_FETES)
+    recette_locataires = sum(l.get("montant", 0) for l in DB_LOCATAIRES)
 
     alertes_stock = [p for p in DB_COMPTOIR if p.get("quantite_stock", 0) < 5]
 
