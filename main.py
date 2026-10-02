@@ -3,6 +3,7 @@ import random
 from datetime import datetime, timedelta
 from typing import Optional
 
+
 from fastapi import FastAPI, Request, Form, status, Cookie, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -201,50 +202,25 @@ def dashboard(
     db: Session = Depends(get_db)
 ):
     user = None
-
-    # 1. Récupération du token depuis les cookies ou l'en-tête
     token_str = session_token or request.cookies.get("session_token")
 
+    # 1. Récupération sécurisée de l'utilisateur
     if token_str:
-        # Si le token a été stocké sous forme de dictionnaire ou string
-        if isinstance(token_str, dict):
-            token_str = token_str.get("access_token") or token_str.get("session_token")
-
-        # 2. Décodage manuel sécurisé du JWT
         try:
-            payload = jwt.decode(token_str, SECRET_KEY, algorithms=[ALGORITHM])
-            user_id = payload.get("sub")
-            role = payload.get("role", "super_admin")
+            # Réutilisation de votre fonction d'authentification existante
+            user = get_current_user(token_str, db)
+        except Exception as e:
+            print(f"Erreur verification session dashboard : {e}", flush=True)
 
-            # Recherche dans Supabase si présent
-            if db and str(user_id) != "0000":
-                try:
-                    db_user = db.query(models.Utilisateur).filter(models.Utilisateur.id == user_id).first()
-                    if db_user:
-                        user = {
-                            "id": db_user.id,
-                            "nom_complet": db_user.nom_complet,
-                            "role": db_user.role
-                        }
-                except Exception as db_err:
-                    print(f"Erreur DB dashboard: {db_err}", flush=True)
+    # 2. Secours pour l'accès Fondateur (PIN 0000)
+    if not user and token_str == "0000":
+        user = {"id": "0000", "nom_complet": "Fondateur", "role": "super_admin_fondateur"}
 
-            # Fallback (Compte Fondateur 0000 ou utilisateur local)
-            if not user:
-                user = {
-                    "id": user_id or "admin",
-                    "nom_complet": "Propriétaire / Admin",
-                    "role": role
-                }
-
-        except Exception as jwt_err:
-            print(f"=== ERREUR DECODAGE JWT DASHBOARD : {jwt_err} ===", flush=True)
-
-    # 3. Si aucune session valide n'a pu être reconstruite, retour au login
+    # 3. Si aucun utilisateur n'est validé, retour vers la connexion
     if not user:
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # 4. Calculs des recettes et rendu de la page
+    # 4. Calculs des recettes du tableau de bord
     recette_toilettes = sum(e.get("montant", 0) for e in DB_TOILETTES)
     recette_flats = sum(s.get("montant", 0) for s in DB_SEJOURS_FLATS)
     recette_comptoir = sum(v.get("montant", 0) for v in DB_VENTES_COMPTOIR)
@@ -274,6 +250,7 @@ def dashboard(
             "tarifs": TARIFS_SYSTEME
         }
     )
+
 
 @app.post("/configuration/tarifs")
 @app.post("/admin/configuration/tarifs")
