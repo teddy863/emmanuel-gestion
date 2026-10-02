@@ -4,6 +4,7 @@ jinja2
 python-multipart
 sqlalchemy
 psycopg2-binary
+psycopg[binary]
 pyjwt
 passlib[argon2]
 python-jose[cryptography]
