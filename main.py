@@ -1,27 +1,41 @@
-from database import engine, Base, get_db
-from sqlalchemy.orm import Session
-import models
-import crud
-# Création automatique des tables sur Supabase au démarrage
-Base.metadata.create_all(bind=engine)
-from database import engine, Base
-import models
-Base.metadata.create_all(bind=engine)
-from fastapi import FastAPI, Request, Form, status, Cookie, Depends
+import uuid
+import random
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import FastAPI, Request, Form, status, Cookie, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-import uuid
-from datetime import datetime
-from typing import Optional
-from security import hash_pin, verify_pin, create_access_token, decode_access_token, generate_auto_pin
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="Emmanuel - Application de Gestion")
+from database import engine, Base, get_db
+import models
+import crud
+from security import hash_pin, verify_pin, create_access_token, decode_access_token, generate_auto_pin
+from services.email_service import envoyer_code_otp_email
+
+# Initialisation automatique des tables sur Supabase au démarrage
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Emmanuel - Application de Gestion SaaS")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# --- BASE DE DONNÉES EN MÉMOIRE CENTRALISÉE ---
+# Stockage temporaire des codes OTP d'inscription
+DB_OTP_TEMP = {}
+
+ROLES_LABELS = {
+    "gerant_toilettes": "Gérant Toilettes",
+    "gerant_flats": "Gérant Flats",
+    "gerant_comptoir": "Gérant Comptoir",
+    "cuisinier": "Cuisinier / Restaurant",
+    "gerant_salle": "Gérant Salle de Fêtes",
+    "gerant_locataires": "Gérant Locataires"
+}
+
+# --- DONNÉES EN MÉMOIRE POUR LES SITES EXISTANTS (COMPATIBILITÉ) ---
 DB_ETABLISSEMENTS = [
     {"id": "site_1", "nom": "Emmanuel - Bandal", "est_actif": True},
     {"id": "site_2", "nom": "Emmanuel - Tchangu", "est_actif": True}
@@ -29,6 +43,7 @@ DB_ETABLISSEMENTS = [
 
 DB_GERANTS = [
     {"id": "admin_1", "nom_complet": "Emmanuel K.", "role": "super_admin", "role_label": "Super Admin", "pin": "1234", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "etablissement_nom": "Tous les sites"},
+    {"id": "fondateur_1", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "role_label": "Super Admin Fondateur", "pin": "0000", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "etablissement_nom": "Tous les sites"},
     {"id": "toilette_1", "nom_complet": "Jeanne M.", "role": "gerant_toilettes", "role_label": "Gérant Toilettes", "pin": "5678", "salaire": 150000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
     {"id": "flat_1", "nom_complet": "Patrick N.", "role": "gerant_flats", "role_label": "Gérant Flats", "pin": "9012", "salaire": 200000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
     {"id": "comptoir_1", "nom_complet": "Bibiche T.", "role": "gerant_comptoir", "role_label": "Gérant Comptoir", "pin": "1111", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
@@ -43,7 +58,6 @@ TARIFS_SYSTEME = {
     "flat_heure": 5000.0
 }
 
-# Enregistrements en direct
 DB_TOILETTES = []
 DB_SEJOURS_FLATS = []
 DB_VENTES_COMPTOIR = []
@@ -52,6 +66,7 @@ DB_CUISINE_DEPENSES = []
 DB_SALLE_FETES = []
 DB_LOCATAIRES = []
 DB_DETTES = []
+DB_CLOTURES = []
 
 DB_CHAMBRES = [
     {"id": "1", "nom": "Ch. 1", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
@@ -76,18 +91,8 @@ DB_CUISINE_MENU = [
     {"id": "5", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
 ]
 
-DB_CLOTURES = []
-
-ROLES_LABELS = {
-    "gerant_toilettes": "Gérant Toilettes",
-    "gerant_flats": "Gérant Flats",
-    "gerant_comptoir": "Gérant Comptoir",
-    "cuisinier": "Cuisinier / Restaurant",
-    "gerant_salle": "Gérant Salle de Fêtes",
-    "gerant_locataires": "Gérant Locataires"
-}
-
-def get_current_user(session_token: Optional[str], db: Session):
+# --- FONCTION UTILISATEUR COMPATIBLE SUPABASE & MÉMOIRE ---
+def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
     payload = decode_access_token(session_token)
@@ -95,13 +100,21 @@ def get_current_user(session_token: Optional[str], db: Session):
         return None
     user_id = payload.get("sub")
     
-    # Recherche directe dans la base de données Supabase
-    user = db.query(models.Utilisateur).filter(
-        models.Utilisateur.id == user_id, 
-        models.Utilisateur.est_actif == True
-    ).first()
-    
-    return user
+    # 1. Vérification dans la base Supabase si session DB fournie
+    if db:
+        db_user = db.query(models.Utilisateur).filter(
+            models.Utilisateur.id == user_id, 
+            models.Utilisateur.est_actif == True
+        ).first()
+        if db_user:
+            return {"id": db_user.id, "nom_complet": db_user.nom_complet, "role": db_user.role}
+
+    # 2. Secours sur les comptes locaux
+    for g in DB_GERANTS:
+        if g["id"] == user_id and g["est_actif"]:
+            return g
+            
+    return None
 
 # --- AUTHENTIFICATION ---
 @app.get("/", response_class=HTMLResponse)
@@ -110,11 +123,27 @@ def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
 @app.post("/login")
-def login(request: Request, pin: str = Form(...)):
+def login(request: Request, pin: str = Form(...), db: Session = Depends(get_db)):
+    # Recherche dans la base de données Supabase
+    db_user = db.query(models.Utilisateur).filter(
+        models.Utilisateur.pin == pin,
+        models.Utilisateur.est_actif == True
+    ).first()
+
+    if db_user:
+        token = create_access_token({"sub": db_user.id, "role": db_user.role})
+        target_url = "/admin/plateforme" if db_user.role == "super_admin_fondateur" else ("/dashboard" if db_user.role == "super_admin" else f"/{db_user.role.replace('gerant_', '')}")
+        if db_user.role == "cuisinier":
+            target_url = "/cuisine"
+        response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie(key="session_token", value=token, httponly=True)
+        return response
+
+    # Fallback comptes locaux
     for g in DB_GERANTS:
         if g["pin"] == pin and g["est_actif"]:
             token = create_access_token({"sub": g["id"], "role": g["role"]})
-            target_url = "/dashboard" if g["role"] == "super_admin" else f"/{g['role'].replace('gerant_', '')}"
+            target_url = "/admin/plateforme" if g["role"] == "super_admin_fondateur" else ("/dashboard" if g["role"] == "super_admin" else f"/{g['role'].replace('gerant_', '')}")
             if g["role"] == "cuisinier":
                 target_url = "/cuisine"
             response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
@@ -131,9 +160,9 @@ def logout():
 
 # --- TABLEAU DE BORD SUPER ADMIN ---
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def dashboard(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     recette_toilettes = sum(e["montant"] for e in DB_TOILETTES)
@@ -172,10 +201,11 @@ def ajuster_tarifs(
     toilettes_petit: float = Form(...),
     toilettes_grand: float = Form(...),
     flat_heure: float = Form(...),
-    session_token: Optional[str] = Cookie(None)
+    session_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
 ):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     TARIFS_SYSTEME["toilettes_petit"] = toilettes_petit
@@ -186,23 +216,23 @@ def ajuster_tarifs(
 
 # --- ÉTABLISSEMENTS & GÉRANTS ---
 @app.get("/etablissements", response_class=HTMLResponse)
-def page_etablissements(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def page_etablissements(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request=request, name="etablissements.html", context={"user": user, "etablissements": DB_ETABLISSEMENTS})
 
 @app.get("/gerants", response_class=HTMLResponse)
-def gerants_page(request: Request, nouveau_pin: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def gerants_page(request: Request, nouveau_pin: Optional[str] = None, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request=request, name="gerants.html", context={"user": user, "gerants": DB_GERANTS, "etablissements": DB_ETABLISSEMENTS, "roles_labels": ROLES_LABELS, "nouveau_pin": nouveau_pin})
 
 @app.post("/gerants/creer")
-def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: float = Form(150000.0), etablissement_id: Optional[str] = Form(None), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: float = Form(150000.0), etablissement_id: Optional[str] = Form(None), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     pin_auto = generate_auto_pin()
     nom_site = next((s["nom"] for s in DB_ETABLISSEMENTS if s["id"] == etablissement_id), "Tous les sites")
@@ -221,9 +251,9 @@ def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: f
 
 @app.get("/gerants/supprimer/{gerant_id}")
 @app.post("/gerants/supprimer/{gerant_id}")
-def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     global DB_GERANTS
     DB_GERANTS = [g for g in DB_GERANTS if not (g["id"] == gerant_id and g["role"] != "super_admin")]
@@ -232,9 +262,9 @@ def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)
 # --- MODULE FLATS & CHAMBRES ---
 @app.get("/flats", response_class=HTMLResponse)
 @app.get("/flat", response_class=HTMLResponse)
-def flats_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
+def flats_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     
     return templates.TemplateResponse(
@@ -249,9 +279,9 @@ def flats_page(request: Request, session_token: Optional[str] = Cookie(None)):
     )
 
 @app.get("/flats/chambre/statut/{chambre_id}/{nouveau_statut}")
-def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
+def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     for ch in DB_CHAMBRES:
@@ -266,9 +296,9 @@ def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: 
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/chambre/creer")
-def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form(None), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form(None), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     nouvel_id = str(len(DB_CHAMBRES) + 1)
@@ -285,9 +315,9 @@ def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/chambre/modifier")
-def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] != "super_admin":
+def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     for ch in DB_CHAMBRES:
@@ -298,9 +328,9 @@ def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), 
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/occuper")
-def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...), duree: int = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
+def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...), duree: int = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for ch in DB_CHAMBRES:
         if ch["id"] == chambre_id and ch["statut"] == "libre":
@@ -312,9 +342,9 @@ def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/flats/liberer/{chambre_id}")
-def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
+def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for ch in DB_CHAMBRES:
         if ch["id"] == chambre_id and ch["statut"] == "occupee":
@@ -326,9 +356,9 @@ def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)
 
 # --- MODULE COMPTOIR ---
 @app.get("/comptoir", response_class=HTMLResponse)
-def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(
         request=request, 
@@ -343,9 +373,9 @@ def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None))
     )
 
 @app.get("/comptoir/vendre_une/{produit_id}")
-def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     for p in DB_COMPTOIR:
@@ -376,9 +406,9 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/comptoir/ajouter_stock")
-def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...), nombre_casiers: int = Form(...), prix_achat_casier: float = Form(...), prix_vente_bouteille: float = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
+def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...), nombre_casiers: int = Form(...), prix_achat_casier: float = Form(...), prix_vente_bouteille: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     nouvelles_bouteilles = unites_par_casier * nombre_casiers
@@ -406,9 +436,9 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
 
 # --- MODULE CUISINE ---
 @app.get("/cuisine", response_class=HTMLResponse)
-def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     total_v = sum(v["montant"] for v in DB_CUISINE_VENTES)
@@ -429,9 +459,9 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None)):
     )
 
 @app.post("/cuisine/vendre_combinaison")
-async def vendre_combinaison(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+async def vendre_combinaison(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     form_data = await request.form()
@@ -462,9 +492,9 @@ async def vendre_combinaison(request: Request, session_token: Optional[str] = Co
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/cuisine/menu/ajouter")
-def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str = Form("morceau"), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str = Form("morceau"), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     
     DB_CUISINE_MENU.append({
@@ -476,9 +506,9 @@ def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str 
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/cuisine/depense")
-def enregistrer_depense_cuisine(description: str = Form(...), montant: float = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+def enregistrer_depense_cuisine(description: str = Form(...), montant: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     DB_CUISINE_DEPENSES.insert(0, {
@@ -491,31 +521,31 @@ def enregistrer_depense_cuisine(description: str = Form(...), montant: float = F
 
 # --- MODULE SALLE DE FÊTES & LOCATAIRES ---
 @app.get("/salle", response_class=HTMLResponse)
-def salle_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_salle", "super_admin"]:
+def salle_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_salle", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request=request, name="salle.html", context={"user": user, "reservations": DB_SALLE_FETES, "total_salle": sum(r["montant"] for r in DB_SALLE_FETES)})
 
 @app.get("/locataires", response_class=HTMLResponse)
-def locataires_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_locataires", "super_admin"]:
+def locataires_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_locataires", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request=request, name="locataires.html", context={"user": user, "locataires": DB_LOCATAIRES, "total_locataires": sum(l["montant"] for l in DB_LOCATAIRES)})
 
 # --- MODULE TOILETTES ---
 @app.get("/toilettes", response_class=HTMLResponse)
-def toilettes_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
+def toilettes_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_toilettes", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request=request, name="toilettes.html", context={"user": user, "total_toilettes": sum(e["montant"] for e in DB_TOILETTES), "passages": DB_TOILETTES, "tarif_petit": TARIFS_SYSTEME["toilettes_petit"], "tarif_grand": TARIFS_SYSTEME["toilettes_grand"], "tarif_heure": TARIFS_SYSTEME["flat_heure"]})
 
 @app.post("/toilettes/encaisser")
-def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
-    if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
+def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["gerant_toilettes", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     type_besoin = "Petit besoin" if montant == TARIFS_SYSTEME["toilettes_petit"] else "Grand besoin"
     DB_TOILETTES.insert(0, {"id": str(uuid.uuid4()), "montant": montant, "type_besoin": type_besoin, "gerant": user["nom_complet"], "heure": datetime.now().strftime("%H:%M:%S")})
@@ -523,8 +553,8 @@ def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] 
 
 # --- CLÔTURE ISOLÉE PAR GÉRANT ---
 @app.get("/cloture", response_class=HTMLResponse)
-def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
+def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -543,7 +573,7 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
     else:
         total_attendu = sum(e["montant"] for e in DB_TOILETTES) + sum(s["montant"] for s in DB_SEJOURS_FLATS) + sum(v["montant"] for v in DB_VENTES_COMPTOIR) + sum(v["montant"] for v in DB_CUISINE_VENTES) + sum(r["montant"] for r in DB_SALLE_FETES) + sum(l["montant"] for l in DB_LOCATAIRES)
 
-    if user["role"] == "super_admin":
+    if user["role"] in ["super_admin", "super_admin_fondateur"]:
         mes_clotures = DB_CLOTURES
     else:
         mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
@@ -551,8 +581,8 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None)):
     return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "clotures": mes_clotures, "message": None})
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
-def valider_cloture(request: Request, montant_compte: float = Form(...), session_token: Optional[str] = Cookie(None)):
-    user = get_current_user(session_token)
+def valider_cloture(request: Request, montant_compte: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -620,7 +650,7 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         "detail": detail_txt
     })
 
-    if user["role"] == "super_admin":
+    if user["role"] in ["super_admin", "super_admin_fondateur"]:
         mes_clotures = DB_CLOTURES
     else:
         mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
@@ -632,16 +662,9 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
     )
 
 # ==============================================================================
-#                 NOUVELLES ROUTES SAAS & ESPACE FONDATEUR
+#                 ROUTES INSCRIPTION SAAS, OTP & ESPACE FONDATEUR
 # ==============================================================================
 
-import random
-from services.email_service import envoyer_code_otp_email
-
-# Stockage temporaire des codes OTP d'inscription
-DB_OTP_TEMP = {}
-
-# --- INSCRIPTION CLIENT SAAS ---
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
     return templates.TemplateResponse(request=request, name="register.html")
@@ -765,7 +788,6 @@ def valider_otp(
 
     return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- ESPACE FONDATEUR (ADMIN PLATEFORME SAAS) ---
 @app.get("/admin/plateforme", response_class=HTMLResponse)
 def espace_fondateur(
     request: Request, 
@@ -773,7 +795,7 @@ def espace_fondateur(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(session_token, db)
-    if not user or user.role != "super_admin_fondateur":
+    if not user or user["role"] != "super_admin_fondateur":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     organisations = db.query(models.Organisation).all()
@@ -800,7 +822,7 @@ def changer_statut_organisation(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(session_token, db)
-    if not user or user.role != "super_admin_fondateur":
+    if not user or user["role"] != "super_admin_fondateur":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     org = db.query(models.Organisation).filter(models.Organisation.id == org_id).first()
