@@ -750,33 +750,28 @@ def valider_otp(
     db: Session = Depends(get_db)
 ):
     email_clean = email.strip().lower()
-
-    # Le template réel utilisé pour l'inscription/vérification
     template_name = "register.html"
 
     if email_clean not in DB_OTP_TEMP:
-        return templates.TemplateResponse(template_name, {
-            "request": request,
-            "email": email_clean,
-            "error": "Session expirée ou invalide. Veuillez réessayer."
-        })
+        return templates.TemplateResponse(
+            name=template_name,
+            context={"request": request, "email": email_clean, "error": "Session expirée ou invalide. Veuillez réessayer."}
+        )
 
     data = DB_OTP_TEMP[email_clean]
 
     if datetime.utcnow() > data["expire"]:
         del DB_OTP_TEMP[email_clean]
-        return templates.TemplateResponse(template_name, {
-            "request": request,
-            "email": email_clean,
-            "error": "Le code OTP a expiré."
-        })
+        return templates.TemplateResponse(
+            name=template_name,
+            context={"request": request, "email": email_clean, "error": "Le code OTP a expiré."}
+        )
 
     if data["code"] != code.strip():
-        return templates.TemplateResponse(template_name, {
-            "request": request,
-            "email": email_clean,
-            "error": "Code OTP incorrect."
-        })
+        return templates.TemplateResponse(
+            name=template_name,
+            context={"request": request, "email": email_clean, "error": "Code OTP incorrect."}
+        )
 
     try:
         # 1. Enregistrement Organisation
@@ -816,52 +811,20 @@ def valider_otp(
         db.add(admin_user)
         db.commit()
 
-        # Nettoyage de la mémoire temporaire après succès
         del DB_OTP_TEMP[email_clean]
-
-        # Redirection vers la page de connexion
         return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
 
     except Exception as e:
         db.rollback()
         print(f"=== ERREUR BDD SUPABASE : {e} ===", flush=True)
-        return templates.TemplateResponse(template_name, {
-            "request": request,
-            "email": email_clean,
-            "error": f"Erreur lors de la création en base de données : {e}"
-        })
+        
+        error_msg = "Cet e-mail est déjà utilisé." if "organisations_email_key" in str(e) else f"Erreur BDD : {e}"
+        
+        return templates.TemplateResponse(
+            name=template_name,
+            context={"request": request, "email": email_clean, "error": error_msg}
+        )
     
-@app.get("/admin/plateforme", response_class=HTMLResponse)
-def espace_fondateur(
-    request: Request, 
-    session_token: Optional[str] = Cookie(None),
-    db: Session = Depends(get_db)
-):
-    user = get_current_user(session_token, db)
-    if not user or user["role"] != "super_admin_fondateur":
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
-    try:
-        organisations = db.query(models.Organisation).all()
-    except Exception:
-        organisations = []
-
-    total_orgs = len(organisations)
-    actifs = len([o for o in organisations if o.est_active and not o.est_en_essai])
-    en_essai = len([o for o in organisations if o.est_en_essai])
-
-    return templates.TemplateResponse(
-        request=request,
-        name="admin_plateforme.html",
-        context={
-            "user": user,
-            "organisations": organisations,
-            "total_organisations": total_orgs,
-            "abonnements_actifs": actifs,
-            "en_essai": en_essai
-        }
-    )
-
 @app.get("/admin/plateforme/toggle/{org_id}")
 def changer_statut_organisation(
     org_id: str, 
