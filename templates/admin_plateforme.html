@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace Fondateur — Contrôle SaaS</title>
+  <style>
+    body { background: #0D1117; color: #E6EDF3; font-family: system-ui, sans-serif; padding: 20px; margin: 0; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363D; padding-bottom: 15px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+    .stat-card { background: #161B22; border: 1px solid #30363D; padding: 15px; border-radius: 8px; }
+    .stat-card h3 { margin: 0; font-size: 0.9em; color: #8B949E; }
+    .stat-card p { margin: 5px 0 0 0; font-size: 1.8em; font-weight: bold; color: #2F81F7; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #161B22; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #30363D; }
+    th { background: #21262D; color: #8B949E; font-size: 0.85em; }
+    .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; }
+    .badge-active { background: #238636; color: #FFF; }
+    .badge-trial { background: #D29922; color: #FFF; }
+    .badge-blocked { background: #DA3633; color: #FFF; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>👑 Espace Fondateur — Supervision SaaS</h2>
+    <a href="/logout" style="color: #F85149; text-decoration: none; font-weight: bold;">Déconnexion</a>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Total Établissements</h3>
+      <p>{{ total_organisations }}</p>
+    </div>
+    <div class="stat-card">
+      <h3>Abonnés Actifs</h3>
+      <p style="color: #3FB950;">{{ abonnements_actifs }}</p>
+    </div>
+    <div class="stat-card">
+      <h3>Périodes d'Essai</h3>
+      <p style="color: #D29922;">{{ en_essai }}</p>
+    </div>
+  </div>
+
+  <h3>Liste des Établissements Clients</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Établissement</th>
+        <th>Propriétaire</th>
+        <th>E-mail</th>
+        <th>Téléphone</th>
+        <th>Statut</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for org in organisations %}
+      <tr>
+        <td><strong>{{ org.nom_entreprise }}</strong></td>
+        <td>{{ org.nom_proprietaire }}</td>
+        <td>{{ org.email }}</td>
+        <td>{{ org.telephone }}</td>
+        <td>
+          {% if org.est_active and org.est_en_essai %}
+            <span class="badge badge-trial">Essai 14j</span>
+          {% elif org.est_active %}
+            <span class="badge badge-active">Actif</span>
+          {% else %}
+            <span class="badge badge-blocked">Suspendu</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="/admin/plateforme/toggle/{{ org.id }}" style="color: #58A6FF; text-decoration: none;">Changer Statut</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

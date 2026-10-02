@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inscription Établissement — Commercial SaaS</title>
+  <style>
+    body { background: #121A21; color: #FFF; font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
+    .card { background: #1C2732; border: 1px solid #2A3847; padding: 25px; border-radius: 12px; width: 100%; max-width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    h2 { margin-top: 0; color: #00B4D8; text-align: center; }
+    p { color: #A0AEC0; font-size: 0.9em; text-align: center; margin-bottom: 20px; }
+    label { display: block; margin-top: 10px; font-weight: bold; font-size: 0.85em; color: #CBD5E0; }
+    input { width: 100%; padding: 12px; margin-top: 5px; margin-bottom: 12px; background: #121A21; border: 1px solid #2A3847; color: #FFF; border-radius: 8px; box-sizing: border-box; font-size: 1em; }
+    .btn { background: #0077B6; color: #FFF; border: 0; padding: 14px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 1em; }
+    .btn:hover { background: #0096C7; }
+    .footer-link { text-align: center; margin-top: 15px; font-size: 0.85em; }
+    .footer-link a { color: #00B4D8; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Créer votre Établissement</h2>
+    <p>Profitez de 14 jours d'essai gratuit. Sans engagement.</p>
+
+    <form action="/register" method="POST">
+      <label>Nom de l'Établissement / Complexe</label>
+      <input type="text" name="nom_entreprise" required placeholder="ex: Bar Resto Le Champion">
+
+      <label>Nom complet du Propriétaire</label>
+      <input type="text" name="nom_proprietaire" required placeholder="ex: Jean Kabamba">
+
+      <label>Adresse E-mail (Vérification gratuite)</label>
+      <input type="email" name="email" required placeholder="ex: contact@exemple.com">
+
+      <label>Numéro Téléphone (WhatsApp / Mobile Money)</label>
+      <input type="tel" name="telephone" required placeholder="ex: +243810000000">
+
+      <label>Code PIN Principal Administrateur (4 chiffres)</label>
+      <input type="password" name="pin" maxlength="4" required placeholder="****">
+
+      <button type="submit" class="btn">S'INSCRIRE ET RECEVOIR LE CODE</button>
+    </form>
+
+    <div class="footer-link">
+      Vous avez déjà un compte ? <a href="/login">Se connecter</a>
+    </div>
+  </div>
+</body>
+</html>
