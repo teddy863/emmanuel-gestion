@@ -134,7 +134,6 @@ def login(
     code_pin: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
-    # Accepte le champ 'pin' ou 'code_pin' soumis par le formulaire HTML
     valeur_pin = (pin or code_pin or "").strip()
 
     if not valeur_pin:
@@ -145,14 +144,14 @@ def login(
             status_code=400
         )
 
-    # 1. ACCÈS SECOURS FONDATEUR (0000)
+    # 1. ACCÈS SECOURS FONDATEUR (0000) -> Redirige vers /dashboard
     if valeur_pin == "0000":
-        token = create_access_token({"sub": "0000", "role": "super_admin_fondateur"})
-        response = RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
+        token = create_access_token({"sub": "0000", "role": "super_admin"})
+        response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION SUPABASE (Comptes créés via l'application)
+    # 2. VÉRIFICATION DANS SUPABASE (Votre compte wabimesa@gmail.com)
     if db:
         try:
             db_user = db.query(models.Utilisateur).filter(
@@ -163,41 +162,30 @@ def login(
             if db_user:
                 token = create_access_token({"sub": str(db_user.id), "role": db_user.role})
                 
-                # Détermination de l'URL cible selon le rôle
-                if db_user.role == "super_admin_fondateur":
-                    target_url = "/admin/plateforme"
-                elif db_user.role == "super_admin":
+                # TOUS les super_admin et propriétaires vont sur /dashboard
+                if db_user.role in ["super_admin", "super_admin_fondateur"]:
                     target_url = "/dashboard"
                 elif db_user.role == "cuisinier":
                     target_url = "/cuisine"
                 else:
-                    target_url = f"/{db_user.role.replace('gerant_', '')}"
+                    target_url = "/dashboard"
 
                 response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
                 response.set_cookie(key="session_token", value=token, httponly=True)
                 return response
         except Exception as e:
-            print(f"Erreur recherche BDD connexion : {e}", flush=True)
+            print(f"Erreur connexion BDD : {e}", flush=True)
 
-    # 3. VÉRIFICATION COMPTES LOCAUX (DB_GERANTS)
+    # 3. VÉRIFICATION COMPTES LOCAUX
     for g in DB_GERANTS:
         if str(g.get("pin")) == valeur_pin and g.get("est_actif", True):
             token = create_access_token({"sub": str(g["id"]), "role": g["role"]})
-            
-            if g["role"] == "super_admin_fondateur":
-                target_url = "/admin/plateforme"
-            elif g["role"] == "super_admin":
-                target_url = "/dashboard"
-            elif g["role"] == "cuisinier":
-                target_url = "/cuisine"
-            else:
-                target_url = f"/{g['role'].replace('gerant_', '')}"
-
+            target_url = "/cuisine" if g.get("role") == "cuisinier" else "/dashboard"
             response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
             response.set_cookie(key="session_token", value=token, httponly=True)
             return response
 
-    # 4. ÉCHEC DE CONNEXION
+    # 4. PIN INCORRECT
     return templates.TemplateResponse(
         request=request,
         name="login.html",
