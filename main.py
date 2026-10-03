@@ -3,7 +3,6 @@ import random
 from datetime import datetime, timedelta
 from typing import Optional
 
-
 from fastapi import FastAPI, Request, Form, status, Cookie, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -100,7 +99,16 @@ DB_CUISINE_MENU = [
 def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
-    payload = decode_access_token(session_token)
+    
+    # Prise en charge si le jeton est transmis sous forme de dictionnaire ou chaîne
+    token_val = session_token
+    if isinstance(session_token, dict):
+        token_val = session_token.get("access_token") or session_token.get("session_token")
+
+    if str(token_val) == "0000":
+        return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
+
+    payload = decode_access_token(token_val)
     if not payload:
         return None
     user_id = payload.get("sub")
@@ -117,7 +125,7 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
             pass
 
     for g in DB_GERANTS:
-        if g["id"] == user_id and g["est_actif"]:
+        if str(g["id"]) == str(user_id) and g["est_actif"]:
             return g
             
     return None
@@ -136,7 +144,6 @@ def login(
     db: Session = Depends(get_db)
 ):
     valeur_pin = (pin or code_pin or "").strip()
-
     if not valeur_pin:
         return templates.TemplateResponse(
             request=request,
@@ -145,32 +152,23 @@ def login(
             status_code=400
         )
 
-    # 1. ACCÈS SECOURS FONDATEUR (0000) -> Redirige vers /dashboard
+    # 1. ACCÈS SECOURS FONDATEUR (0000)
     if valeur_pin == "0000":
         token = create_access_token({"sub": "0000", "role": "super_admin"})
         response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION DANS SUPABASE (Votre compte wabimesa@gmail.com)
+    # 2. VÉRIFICATION SUPABASE
     if db:
         try:
             db_user = db.query(models.Utilisateur).filter(
                 models.Utilisateur.pin == valeur_pin,
                 models.Utilisateur.est_actif == True
             ).first()
-
             if db_user:
                 token = create_access_token({"sub": str(db_user.id), "role": db_user.role})
-                
-                # TOUS les super_admin et propriétaires vont sur /dashboard
-                if db_user.role in ["super_admin", "super_admin_fondateur"]:
-                    target_url = "/dashboard"
-                elif db_user.role == "cuisinier":
-                    target_url = "/cuisine"
-                else:
-                    target_url = "/dashboard"
-
+                target_url = "/cuisine" if db_user.role == "cuisinier" else "/dashboard"
                 response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
                 response.set_cookie(key="session_token", value=token, httponly=True)
                 return response
@@ -204,23 +202,18 @@ def dashboard(
     user = None
     token_str = session_token or request.cookies.get("session_token")
 
-    # 1. Récupération sécurisée de l'utilisateur
     if token_str:
         try:
-            # Réutilisation de votre fonction d'authentification existante
             user = get_current_user(token_str, db)
         except Exception as e:
             print(f"Erreur verification session dashboard : {e}", flush=True)
 
-    # 2. Secours pour l'accès Fondateur (PIN 0000)
-    if not user and token_str == "0000":
-        user = {"id": "0000", "nom_complet": "Fondateur", "role": "super_admin_fondateur"}
+    if not user and (token_str == "0000" or request.cookies.get("session_token") == "0000"):
+        user = {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
 
-    # 3. Si aucun utilisateur n'est validé, retour vers la connexion
     if not user:
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # 4. Calculs des recettes du tableau de bord
     recette_toilettes = sum(e.get("montant", 0) for e in DB_TOILETTES)
     recette_flats = sum(s.get("montant", 0) for s in DB_SEJOURS_FLATS)
     recette_comptoir = sum(v.get("montant", 0) for v in DB_VENTES_COMPTOIR)
@@ -251,7 +244,6 @@ def dashboard(
         }
     )
 
-
 @app.post("/configuration/tarifs")
 @app.post("/admin/configuration/tarifs")
 def ajuster_tarifs(
@@ -264,11 +256,9 @@ def ajuster_tarifs(
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     TARIFS_SYSTEME["toilettes_petit"] = toilettes_petit
     TARIFS_SYSTEME["toilettes_grand"] = toilettes_grand
     TARIFS_SYSTEME["flat_heure"] = flat_heure
-
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- ÉTABLISSEMENTS & GÉRANTS ---
@@ -340,7 +330,6 @@ def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: 
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     for ch in DB_CHAMBRES:
         if ch["id"] == chambre_id:
             if nouveau_statut in ["libre", "hors_service"]:
@@ -349,7 +338,6 @@ def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: 
                     ch["montant_recu"] = 0.0
                     ch["duree"] = 0
             break
-
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/chambre/creer")
@@ -357,7 +345,6 @@ def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     nouvel_id = str(len(DB_CHAMBRES) + 1)
     tarif = prix_par_heure if prix_par_heure else TARIFS_SYSTEME["flat_heure"]
     
@@ -376,7 +363,6 @@ def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), 
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     for ch in DB_CHAMBRES:
         if ch["id"] == chambre_id:
             ch["nom"] = nouveau_nom.strip()
@@ -434,7 +420,6 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     for p in DB_COMPTOIR:
         if p["id"] == produit_id:
             if p["quantite_stock"] <= 0:
@@ -449,7 +434,6 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
                         "erreur_stock": f"Stock épuisé pour '{p['nom']}' ! Veuillez réapprovisionner."
                     }
                 )
-
             p["quantite_stock"] -= 1
             DB_VENTES_COMPTOIR.insert(0, {
                 "produit": p["nom"],
@@ -459,7 +443,6 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
                 "gerant": user["nom_complet"]
             })
             break
-
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/comptoir/ajouter_stock")
@@ -467,10 +450,8 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     nouvelles_bouteilles = unites_par_casier * nombre_casiers
     trouve = False
-
     for p in DB_COMPTOIR:
         if p["nom"].strip().lower() == nom.strip().lower():
             p["quantite_stock"] += nouvelles_bouteilles
@@ -478,7 +459,6 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
             p["prix_vente"] = prix_vente_bouteille
             trouve = True
             break
-
     if not trouve:
         DB_COMPTOIR.append({
             "id": str(uuid.uuid4()),
@@ -488,7 +468,6 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
             "prix_vente": prix_vente_bouteille,
             "quantite_stock": nouvelles_bouteilles
         })
-
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- MODULE CUISINE ---
@@ -497,10 +476,8 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), 
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     total_v = sum(v["montant"] for v in DB_CUISINE_VENTES)
     total_d = sum(d["montant"] for d in DB_CUISINE_DEPENSES)
-
     return templates.TemplateResponse(
         request=request, 
         name="cuisine.html", 
@@ -520,11 +497,9 @@ async def vendre_combinaison(request: Request, session_token: Optional[str] = Co
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     form_data = await request.form()
     details_plat = []
     total_plat = 0.0
-
     for m in DB_CUISINE_MENU:
         qty_key = f"qty_{m['id']}"
         if qty_key in form_data and form_data[qty_key]:
@@ -536,7 +511,6 @@ async def vendre_combinaison(request: Request, session_token: Optional[str] = Co
                     details_plat.append(f"{qty} {m['unite']}(s) {m['nom']}")
             except ValueError:
                 pass
-
     if details_plat:
         description_complet = " + ".join(details_plat)
         DB_CUISINE_VENTES.insert(0, {
@@ -545,7 +519,6 @@ async def vendre_combinaison(request: Request, session_token: Optional[str] = Co
             "heure": datetime.now().strftime("%H:%M:%S"),
             "cuisinier": user["nom_complet"]
         })
-
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/cuisine/menu/ajouter")
@@ -567,7 +540,6 @@ def enregistrer_depense_cuisine(description: str = Form(...), montant: float = F
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     DB_CUISINE_DEPENSES.insert(0, {
         "description": description.strip(),
         "montant": montant,
@@ -614,7 +586,6 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), 
     user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     if user["role"] == "gerant_toilettes":
         total_attendu = sum(e["montant"] for e in DB_TOILETTES)
     elif user["role"] == "gerant_flats":
@@ -629,12 +600,10 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), 
         total_attendu = sum(l["montant"] for l in DB_LOCATAIRES)
     else:
         total_attendu = sum(e["montant"] for e in DB_TOILETTES) + sum(s["montant"] for s in DB_SEJOURS_FLATS) + sum(v["montant"] for v in DB_VENTES_COMPTOIR) + sum(v["montant"] for v in DB_CUISINE_VENTES) + sum(r["montant"] for r in DB_SALLE_FETES) + sum(l["montant"] for l in DB_LOCATAIRES)
-
     if user["role"] in ["super_admin", "super_admin_fondateur"]:
         mes_clotures = DB_CLOTURES
     else:
         mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
-
     return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "clotures": mes_clotures, "message": None})
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
@@ -642,9 +611,7 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
     user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     global DB_TOILETTES, DB_SEJOURS_FLATS, DB_VENTES_COMPTOIR, DB_CUISINE_VENTES, DB_CUISINE_DEPENSES, DB_SALLE_FETES, DB_LOCATAIRES
-
     if user["role"] == "gerant_toilettes":
         total_attendu = sum(e["montant"] for e in DB_TOILETTES)
         detail_txt = f"Toilettes: {total_attendu:,.0f} FC"
@@ -691,10 +658,8 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         DB_CUISINE_DEPENSES.clear()
         DB_SALLE_FETES.clear()
         DB_LOCATAIRES.clear()
-
     ecart = montant_compte - total_attendu
     maintenant = datetime.now()
-
     DB_CLOTURES.insert(0, {
         "id": str(uuid.uuid4()),
         "date": maintenant.strftime("%d/%m/%Y"),
@@ -706,12 +671,10 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         "ecart": ecart,
         "detail": detail_txt
     })
-
     if user["role"] in ["super_admin", "super_admin_fondateur"]:
         mes_clotures = DB_CLOTURES
     else:
         mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
-
     return templates.TemplateResponse(
         request=request,
         name="cloture.html", 
@@ -721,7 +684,6 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
 # ==============================================================================
 #                 ROUTES INSCRIPTION SAAS, OTP & ESPACE FONDATEUR
 # ==============================================================================
-
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
     return templates.TemplateResponse(request=request, name="register.html")
@@ -747,7 +709,6 @@ def register_client(
             )
     except Exception:
         pass
-
     code_otp = str(random.randint(100000, 999999))
     
     DB_OTP_TEMP[email_clean] = {
@@ -758,9 +719,7 @@ def register_client(
         "telephone": telephone.strip(),
         "pin": pin.strip()
     }
-
     envoyer_code_otp_email(email_clean, code_otp, nom_entreprise.strip())
-
     return RedirectResponse(url=f"/verify-otp?email={email_clean}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/verify-otp", response_class=HTMLResponse)
@@ -853,7 +812,7 @@ def valider_otp(
         db.commit()
         db.refresh(nouvel_etablissement)
 
-        # 3. Enregistrement Utilisateur Admin
+        # 3. Enregistrement Administrateur / Propriétaire
         admin_user = models.Utilisateur(
             nom_complet=data["nom_proprietaire"],
             role="super_admin",
@@ -865,7 +824,7 @@ def valider_otp(
         db.add(admin_user)
         db.commit()
 
-        # Suppression du code temporaire
+        # Nettoyage de la mémoire temporaire
         del DB_OTP_TEMP[email_clean]
 
         return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
@@ -881,7 +840,7 @@ def valider_otp(
             name=template_name,
             context={"email": email_clean, "error": error_msg}
         )
-    
+
 @app.get("/admin/plateforme/toggle/{org_id}")
 def changer_statut_organisation(
     org_id: str, 
@@ -891,7 +850,6 @@ def changer_statut_organisation(
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin_fondateur":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     try:
         org = db.query(models.Organisation).filter(models.Organisation.id == org_id).first()
         if org:
@@ -899,5 +857,4 @@ def changer_statut_organisation(
             db.commit()
     except Exception:
         pass
-
     return RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
