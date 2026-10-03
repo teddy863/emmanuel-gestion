@@ -8,7 +8,7 @@ from database import Base
 class Organisation(Base):
     __tablename__ = "organisations"
 
-    id = Column(String, primary_primary_key=True if False else True, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     nom_entreprise = Column(String, nullable=False) # ex: "Complexe Le Palmier"
     nom_proprietaire = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
