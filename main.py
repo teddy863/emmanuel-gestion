@@ -104,47 +104,38 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
     if isinstance(session_token, dict):
         token_val = session_token.get("access_token") or session_token.get("session_token")
 
-    if str(token_val) == "0000":
+    token_str = str(token_val).strip()
+
+    # Accès Fondateur rapide
+    if token_str == "0000":
         return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
 
-    payload = decode_access_token(token_val)
-    if not payload:
-        return None
-        
-    user_id = payload.get("sub")
-    role = payload.get("role", "super_admin")
+    # Tentative de décodage du jeton JWT
+    try:
+        payload = decode_access_token(token_str)
+        if payload and "sub" in payload:
+            user_id = payload.get("sub")
+            role = payload.get("role", "super_admin")
+            return {"id": str(user_id), "nom_complet": "Administrateur", "role": role}
+    except Exception as e:
+        print(f"Erreur decode_access_token: {e}", flush=True)
 
+    # Recherche directe dans Supabase par PIN
     if db:
         try:
-            # Conversion explicite en String/Int pour éviter les échecs de comparaison UUID
             db_user = db.query(models.Utilisateur).filter(
-                models.Utilisateur.pin == user_id,  # Secours par PIN si ID diffère
+                models.Utilisateur.pin == token_str,
                 models.Utilisateur.est_actif == True
             ).first()
-
-            if not db_user:
-                db_user = db.query(models.Utilisateur).filter(
-                    models.Utilisateur.id == str(user_id),
-                    models.Utilisateur.est_actif == True
-                ).first()
-
             if db_user:
-                return {
-                    "id": str(db_user.id),
-                    "nom_complet": db_user.nom_complet,
-                    "role": db_user.role
-                }
-        except Exception as e:
-            print(f"Erreur get_current_user BDD : {e}", flush=True)
+                return {"id": str(db_user.id), "nom_complet": db_user.nom_complet, "role": db_user.role}
+        except Exception:
+            pass
 
-    # Fallback pour comptes locaux ou jeton valide
+    # Vérification comptes locaux
     for g in DB_GERANTS:
-        if str(g["id"]) == str(user_id) or str(g["pin"]) == str(user_id):
+        if str(g["pin"]) == token_str or str(g["id"]) == token_str:
             return g
-            
-    # Si le JWT est valide mais introuvable en BDD locale
-    if user_id:
-        return {"id": str(user_id), "nom_complet": "Super Admin", "role": role}
 
     return None
 
@@ -172,12 +163,12 @@ def login(
 
     # 1. ACCÈS SECOURS FONDATEUR (0000)
     if valeur_pin == "0000":
-        token = create_access_token({"sub": "0000", "role": "super_admin"})
+        token = create_access_token({"sub": "0000", "role": "super_admin_fondateur"})
         response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION SUPABASE
+    # 2. VÉRIFICATION DANS SUPABASE
     if db:
         try:
             db_user = db.query(models.Utilisateur).filter(
@@ -185,9 +176,8 @@ def login(
                 models.Utilisateur.est_actif == True
             ).first()
             if db_user:
-                token = create_access_token({"sub": str(db_user.id), "role": db_user.role})
-                target_url = "/cuisine" if db_user.role == "cuisinier" else "/dashboard"
-                response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
+                token = create_access_token({"sub": str(db_user.pin), "role": db_user.role})
+                response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
                 response.set_cookie(key="session_token", value=token, httponly=True)
                 return response
         except Exception as e:
@@ -196,13 +186,11 @@ def login(
     # 3. VÉRIFICATION COMPTES LOCAUX
     for g in DB_GERANTS:
         if str(g.get("pin")) == valeur_pin and g.get("est_actif", True):
-            token = create_access_token({"sub": str(g["id"]), "role": g["role"]})
-            target_url = "/cuisine" if g.get("role") == "cuisinier" else "/dashboard"
-            response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
+            token = create_access_token({"sub": str(g["pin"]), "role": g["role"]})
+            response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
             response.set_cookie(key="session_token", value=token, httponly=True)
             return response
 
-    # 4. PIN INCORRECT
     return templates.TemplateResponse(
         request=request,
         name="login.html",
