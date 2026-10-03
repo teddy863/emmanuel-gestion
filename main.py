@@ -168,16 +168,19 @@ def login(
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION DANS SUPABASE
+    # 2. VÉRIFICATION DANS SUPABASE (Comptes enregistrés réels)
     if db:
         try:
             db_user = db.query(models.Utilisateur).filter(
                 models.Utilisateur.pin == valeur_pin,
                 models.Utilisateur.est_actif == True
             ).first()
+
             if db_user:
-                token = create_access_token({"sub": str(db_user.pin), "role": db_user.role})
-                response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+                # Utilisation de l'ID utilisateur réel (db_user.id) pour le token
+                token = create_access_token({"sub": str(db_user.id), "role": db_user.role})
+                target_url = "/cuisine" if db_user.role == "cuisinier" else "/dashboard"
+                response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
                 response.set_cookie(key="session_token", value=token, httponly=True)
                 return response
         except Exception as e:
@@ -186,69 +189,18 @@ def login(
     # 3. VÉRIFICATION COMPTES LOCAUX
     for g in DB_GERANTS:
         if str(g.get("pin")) == valeur_pin and g.get("est_actif", True):
-            token = create_access_token({"sub": str(g["pin"]), "role": g["role"]})
-            response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+            token = create_access_token({"sub": str(g["id"]), "role": g["role"]})
+            target_url = "/cuisine" if g.get("role") == "cuisinier" else "/dashboard"
+            response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
             response.set_cookie(key="session_token", value=token, httponly=True)
             return response
 
+    # 4. PIN INCORRECT
     return templates.TemplateResponse(
         request=request,
         name="login.html",
         context={"error": "Code PIN incorrect ou compte désactivé"},
         status_code=400
-    )
-
-# --- TABLEAU DE BORD SUPER ADMIN ---
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(
-    request: Request, 
-    session_token: Optional[str] = Cookie(None), 
-    db: Session = Depends(get_db)
-):
-    token_str = session_token or request.cookies.get("session_token")
-    user = None
-
-    if token_str:
-        try:
-            user = get_current_user(token_str, db)
-        except Exception as e:
-            print(f"Erreur session dashboard : {e}", flush=True)
-
-    # Accès de secours garanti pour le fondateur ou tout token valide
-    if not user and (token_str == "0000" or request.cookies.get("session_token") == "0000"):
-        user = {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
-
-    if not user:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-
-    recette_toilettes = sum(e.get("montant", 0) for e in DB_TOILETTES)
-    recette_flats = sum(s.get("montant", 0) for s in DB_SEJOURS_FLATS)
-    recette_comptoir = sum(v.get("montant", 0) for v in DB_VENTES_COMPTOIR)
-    recette_cuisine = sum(v.get("montant", 0) for v in DB_CUISINE_VENTES)
-    recette_salle = sum(r.get("montant", 0) for r in DB_SALLE_FETES)
-    recette_locataires = sum(l.get("montant", 0) for l in DB_LOCATAIRES)
-
-    alertes_stock = [p for p in DB_COMPTOIR if p.get("quantite_stock", 0) < 5]
-
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={
-            "user": user,
-            "recette_jour": recette_toilettes + recette_flats + recette_comptoir + recette_cuisine + recette_salle + recette_locataires,
-            "total_toilettes": recette_toilettes,
-            "total_flats": recette_flats,
-            "total_comptoir": recette_comptoir,
-            "total_cuisine": recette_cuisine,
-            "total_salle": recette_salle,
-            "total_locataires": recette_locataires,
-            "etablissements": DB_ETABLISSEMENTS,
-            "clotures": DB_CLOTURES,
-            "dettes": DB_DETTES,
-            "depenses_cuisine": DB_CUISINE_DEPENSES,
-            "alertes_stock": alertes_stock,
-            "tarifs": TARIFS_SYSTEME
-        }
     )
 
 @app.post("/configuration/tarifs")
