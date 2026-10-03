@@ -95,7 +95,7 @@ DB_CUISINE_MENU = [
     {"id": "5", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
 ]
 
-# --- FONCTION UTILISATEUR SECURISEE ---
+# --- FONCTION UTILISATEUR UNIFIÉE & SÉCURISÉE ---
 def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
@@ -106,11 +106,11 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
     
     token_str = str(token_val).strip()
 
-    # Priorité Accès Fondateur / Développeur (0000)
+    # 1. Priorité Accès Développeur / Fondateur (0000)
     if token_str == "0000":
         return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
 
-    # Décodage du jeton JWT sans blocage BDD
+    # 2. Décodage du jeton JWT
     payload = decode_access_token(token_str)
     if payload and "sub" in payload:
         user_id = str(payload.get("sub"))
@@ -119,7 +119,7 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
         if user_id == "0000" or role == "super_admin_fondateur":
             return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
 
-        # Recherche BDD Supabase sécurisée par champs explicites
+        # Recherche BDD Supabase par sélection ciblée (évite les erreurs de colonnes manquantes)
         if db:
             try:
                 db_user = db.query(
@@ -137,14 +137,14 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
             except Exception as e:
                 print(f"Avertissement BDD get_current_user: {e}", flush=True)
 
-        # Recherche fallback dans les comptes gérants locaux
+        # Recherche fallback comptes gérants locaux
         for g in DB_GERANTS:
             if str(g["id"]) == user_id or str(g["pin"]) == user_id:
                 return g
 
-        return {"id": user_id, "nom_complet": "Administrateur", "role": role}
+        return {"id": user_id, "nom_complet": "Super Admin", "role": role}
 
-    # Recherche directe par PIN brut si non JWT
+    # 3. Recherche directe par PIN brut si non JWT
     for g in DB_GERANTS:
         if str(g["pin"]) == token_str or str(g["id"]) == token_str:
             return g
@@ -173,14 +173,14 @@ def login(
             status_code=400
         )
 
-    # 1. ACCÈS SECOURS FONDATEUR / DÉVELOPPEUR (0000)
+    # 1. ACCÈS DÉVELOPPEUR / FONDATEUR (0000) -> Redirige directement vers la Plateforme SaaS
     if valeur_pin == "0000":
         token = create_access_token({"sub": "0000", "role": "super_admin_fondateur"})
-        response = RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+        response = RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION DANS SUPABASE (Champs ciblés pour éviter l'erreur de colonne salaire)
+    # 2. VÉRIFICATION DANS SUPABASE (Comptes Super Admin clients & gérants)
     if db:
         try:
             db_user = db.query(
@@ -218,11 +218,9 @@ def login(
         status_code=400
     )
 
-# --- TABLEAU DE BORD (ROUTE DOUBLE POUR ÉVITER ERREUR 404) ---
-@app.get("/dashboard", response_class=HTMLResponse)
-@app.get("/admin/dashboard", response_class=HTMLResponse)
+# --- ESPACE DÉVELOPPEUR / FONDATEUR SAAS ---
 @app.get("/admin/plateforme", response_class=HTMLResponse)
-def dashboard(
+def page_plateforme_admin(
     request: Request, 
     session_token: Optional[str] = Cookie(None), 
     db: Session = Depends(get_db)
@@ -230,9 +228,36 @@ def dashboard(
     token_str = session_token or request.cookies.get("session_token")
     user = get_current_user(token_str, db)
 
-    # Secours Fondateur / Développeur
+    # Secours Développeur
     if not user and (token_str == "0000" or request.cookies.get("session_token") == "0000"):
         user = {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
+
+    if not user or user.get("role") != "super_admin_fondateur":
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    organisations = []
+    if db:
+        try:
+            organisations = db.query(models.Organisation).all()
+        except Exception as e:
+            print(f"Erreur lecture organisations: {e}", flush=True)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_plateforme.html",
+        context={"user": user, "organisations": organisations}
+    )
+
+# --- TABLEAU DE BORD SUPER ADMIN CLIENT ---
+@app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+def dashboard(
+    request: Request, 
+    session_token: Optional[str] = Cookie(None), 
+    db: Session = Depends(get_db)
+):
+    token_str = session_token or request.cookies.get("session_token")
+    user = get_current_user(token_str, db)
 
     if not user:
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -804,7 +829,7 @@ def valider_otp(
         )
 
     try:
-        # Enregistrement Organisation
+        # Enregistrement Organisation BDD
         nouvelle_org = models.Organisation(
             nom_entreprise=data["nom_entreprise"],
             nom_proprietaire=data["nom_proprietaire"],
@@ -846,7 +871,7 @@ def valider_otp(
         db.rollback()
         print(f"=== ERREUR BDD CREATION COMPTE : {e} ===", flush=True)
 
-        # Fallback local temporaire si problème BDD
+        # Secours mémoire immédiat si échec BDD
         pin_client = data["pin"]
         DB_GERANTS.append({
             "id": str(uuid.uuid4()),
