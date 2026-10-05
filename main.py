@@ -2,11 +2,13 @@ import uuid
 import random
 from datetime import datetime, timedelta
 from typing import Optional
+
 from fastapi import FastAPI, Request, Form, status, Cookie, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+
 from database import engine, Base, get_db
 import models
 import crud
@@ -37,21 +39,29 @@ ROLES_LABELS = {
     "gerant_locataires": "Gérant Locataires"
 }
 
+# Rôles qui gèrent un poste précis (par opposition au super_admin, qui voit tout son établissement/organisation)
+ROLES_GERANTS_POSTE = set(ROLES_LABELS.keys())
+
 # --- DONNÉES EN MÉMOIRE POUR LES SITES EXISTANTS ---
+# NOTE IMPORTANTE : chaque établissement appartient désormais à une "organisation_id".
+# C'est cette organisation_id qui représente une ENTREPRISE CLIENTE du SaaS (le vrai
+# périmètre d'isolation pour un super_admin, qui peut avoir plusieurs établissements/sites).
+# Un gérant d'exploitation (toilettes, flats, comptoir, cuisine, salle, locataires), lui,
+# reste limité à son seul etablissement_id.
 DB_ETABLISSEMENTS = [
-    {"id": "site_1", "nom": "Emmanuel - Bandal", "est_actif": True},
-    {"id": "site_2", "nom": "Emmanuel - Tchangu", "est_actif": True}
+    {"id": "site_1", "organisation_id": "org_demo_emmanuel", "nom": "Emmanuel - Bandal", "est_actif": True},
+    {"id": "site_2", "organisation_id": "org_demo_emmanuel", "nom": "Emmanuel - Tchangu", "est_actif": True}
 ]
 
 DB_GERANTS = [
-    {"id": "admin_1", "nom_complet": "Emmanuel K.", "role": "super_admin", "role_label": "Super Admin", "pin": "1234", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "etablissement_nom": "Tous les sites"},
-    {"id": "fondateur_1", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "role_label": "Super Admin Fondateur", "pin": "0000", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "etablissement_nom": "Tous les sites"},
-    {"id": "toilette_1", "nom_complet": "Jeanne M.", "role": "gerant_toilettes", "role_label": "Gérant Toilettes", "pin": "5678", "salaire": 150000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "flat_1", "nom_complet": "Patrick N.", "role": "gerant_flats", "role_label": "Gérant Flats", "pin": "9012", "salaire": 200000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "comptoir_1", "nom_complet": "Bibiche T.", "role": "gerant_comptoir", "role_label": "Gérant Comptoir", "pin": "1111", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "cuisine_1", "nom_complet": "Sœur Anne", "role": "cuisinier", "role_label": "Cuisinier / Restaurant", "pin": "2222", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "salle_1", "nom_complet": "Marc L.", "role": "gerant_salle", "role_label": "Gérant Salle de Fêtes", "pin": "3333", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "locataire_1", "nom_complet": "Clarisse V.", "role": "gerant_locataires", "role_label": "Gérant Locataires", "pin": "4444", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "etablissement_nom": "Emmanuel - Bandal"},
+    {"id": "admin_1", "nom_complet": "Emmanuel K.", "role": "super_admin", "role_label": "Super Admin", "pin": "1234", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Tous les sites"},
+    {"id": "fondateur_1", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "role_label": "Super Admin Fondateur", "pin": "0000", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "organisation_id": None, "etablissement_nom": "Tous les sites"},
+    {"id": "toilette_1", "nom_complet": "Jeanne M.", "role": "gerant_toilettes", "role_label": "Gérant Toilettes", "pin": "5678", "salaire": 150000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
+    {"id": "flat_1", "nom_complet": "Patrick N.", "role": "gerant_flats", "role_label": "Gérant Flats", "pin": "9012", "salaire": 200000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
+    {"id": "comptoir_1", "nom_complet": "Bibiche T.", "role": "gerant_comptoir", "role_label": "Gérant Comptoir", "pin": "1111", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
+    {"id": "cuisine_1", "nom_complet": "Sœur Anne", "role": "cuisinier", "role_label": "Cuisinier / Restaurant", "pin": "2222", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
+    {"id": "salle_1", "nom_complet": "Marc L.", "role": "gerant_salle", "role_label": "Gérant Salle de Fêtes", "pin": "3333", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
+    {"id": "locataire_1", "nom_complet": "Clarisse V.", "role": "gerant_locataires", "role_label": "Gérant Locataires", "pin": "4444", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
 ]
 
 TARIFS_SYSTEME = {
@@ -60,6 +70,7 @@ TARIFS_SYSTEME = {
     "flat_heure": 5000.0
 }
 
+# Chaque enregistrement créé dans ces listes porte désormais un champ "etablissement_id".
 DB_TOILETTES = []
 DB_SEJOURS_FLATS = []
 DB_VENTES_COMPTOIR = []
@@ -70,43 +81,101 @@ DB_LOCATAIRES = []
 DB_DETTES = []
 DB_CLOTURES = []
 
+# Les chambres, produits et menu sont aussi des ressources propres à un établissement.
 DB_CHAMBRES = [
-    {"id": "1", "nom": "Ch. 1", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "2", "nom": "Ch. 2", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "3", "nom": "Ch. 3", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "4", "nom": "Ch. 4", "statut": "hors_service", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "5", "nom": "Ch. 5", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "6", "nom": "Ch. 6", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "1", "etablissement_id": "site_1", "nom": "Ch. 1", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "2", "etablissement_id": "site_1", "nom": "Ch. 2", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "3", "etablissement_id": "site_1", "nom": "Ch. 3", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "4", "etablissement_id": "site_1", "nom": "Ch. 4", "statut": "hors_service", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "5", "etablissement_id": "site_1", "nom": "Ch. 5", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
+    {"id": "6", "etablissement_id": "site_1", "nom": "Ch. 6", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
 ]
 
 DB_COMPTOIR = [
-    {"id": "1", "nom": "Eau 1,5 L", "unites_par_casier": 12, "prix_achat_casier": 18000.0, "prix_vente": 2000.0, "quantite_stock": 24},
-    {"id": "2", "nom": "Mützig 65cl", "unites_par_casier": 12, "prix_achat_casier": 30000.0, "prix_vente": 3500.0, "quantite_stock": 36},
-    {"id": "3", "nom": "Coca 33cl", "unites_par_casier": 24, "prix_achat_casier": 36000.0, "prix_vente": 2000.0, "quantite_stock": 48},
+    {"id": "1", "etablissement_id": "site_1", "nom": "Eau 1,5 L", "unites_par_casier": 12, "prix_achat_casier": 18000.0, "prix_vente": 2000.0, "quantite_stock": 24},
+    {"id": "2", "etablissement_id": "site_1", "nom": "Mützig 65cl", "unites_par_casier": 12, "prix_achat_casier": 30000.0, "prix_vente": 3500.0, "quantite_stock": 36},
+    {"id": "3", "etablissement_id": "site_1", "nom": "Coca 33cl", "unites_par_casier": 24, "prix_achat_casier": 36000.0, "prix_vente": 2000.0, "quantite_stock": 48},
 ]
 
 DB_CUISINE_MENU = [
-    {"id": "1", "nom": "Cuisse de poulet", "prix": 5000.0, "unite": "morceau"},
-    {"id": "2", "nom": "Poisson grillé", "prix": 10000.0, "unite": "morceau"},
-    {"id": "3", "nom": "Foufou", "prix": 500.0, "unite": "boule"},
-    {"id": "4", "nom": "Makemba", "prix": 1000.0, "unite": "portion"},
-    {"id": "5", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
+    {"id": "1", "etablissement_id": "site_1", "nom": "Cuisse de poulet", "prix": 5000.0, "unite": "morceau"},
+    {"id": "2", "etablissement_id": "site_1", "nom": "Poisson grillé", "prix": 10000.0, "unite": "morceau"},
+    {"id": "3", "etablissement_id": "site_1", "nom": "Foufou", "prix": 500.0, "unite": "boule"},
+    {"id": "4", "etablissement_id": "site_1", "nom": "Makemba", "prix": 1000.0, "unite": "portion"},
+    {"id": "5", "etablissement_id": "site_1", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
 ]
+
+# ==============================================================================
+#                    OUTILS D'ISOLATION MULTI-TENANT (NOUVEAU)
+# ==============================================================================
+
+def etablissements_autorises(user: dict) -> list:
+    """
+    Retourne la liste des etablissement_id que CET utilisateur a le droit de voir.
+    - super_admin_fondateur : ne doit jamais appeler cette fonction sur une route client
+      (il est bloqué plus bas) ; retourne [] par sécurité si jamais c'est le cas.
+    - super_admin (client) : tous les établissements de SA PROPRE organisation.
+    - gérant de poste (toilettes, flats, comptoir, cuisinier, salle, locataires) :
+      uniquement SON établissement de rattachement.
+    """
+    if not user:
+        return []
+
+    role = user.get("role")
+
+    if role == "super_admin_fondateur":
+        return []
+
+    if role == "super_admin":
+        org_id = user.get("organisation_id")
+        if not org_id:
+            # Repli de sécurité : si on ne connaît pas son organisation, on ne lui
+            # donne accès qu'à son propre etablissement_id (jamais un accès global).
+            etab_id = user.get("etablissement_id")
+            return [etab_id] if etab_id else []
+        return [e["id"] for e in DB_ETABLISSEMENTS if e.get("organisation_id") == org_id]
+
+    # Gérant de poste : uniquement son établissement.
+    etab_id = user.get("etablissement_id")
+    return [etab_id] if etab_id else []
+
+
+def filtrer(liste: list, user: dict) -> list:
+    """Filtre une liste d'enregistrements (dicts avec 'etablissement_id') selon le périmètre de l'utilisateur."""
+    autorises = etablissements_autorises(user)
+    return [x for x in liste if x.get("etablissement_id") in autorises]
+
+
+def dans_perimetre(objet: dict, user: dict) -> bool:
+    """Vérifie qu'un enregistrement précis appartient au périmètre autorisé de l'utilisateur."""
+    return objet.get("etablissement_id") in etablissements_autorises(user)
+
+
+def refuser_si_fondateur(user: dict):
+    """
+    Le super_admin_fondateur ne doit JAMAIS accéder aux routes "client" (dashboard,
+    flats, comptoir, etc.) : il n'a pas d'établissement et ne doit pas se mêler aux
+    données d'une entreprise cliente. On le renvoie systématiquement vers son espace.
+    """
+    if user and user.get("role") == "super_admin_fondateur":
+        return RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
+    return None
+
 
 # --- FONCTION UTILISATEUR UNIFIÉE & SÉCURISÉE ---
 def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
-    
+
     token_val = session_token
     if isinstance(session_token, dict):
         token_val = session_token.get("access_token") or session_token.get("session_token")
-    
+
     token_str = str(token_val).strip()
 
     # 1. Priorité Accès Développeur / Fondateur (0000)
     if token_str == "0000":
-        return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
+        return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
     # 2. Décodage du jeton JWT
     payload = decode_access_token(token_str)
@@ -115,7 +184,7 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
         role = payload.get("role", "super_admin")
 
         if user_id == "0000" or role == "super_admin_fondateur":
-            return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
+            return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
         # Recherche BDD Supabase par sélection ciblée (évite les erreurs de colonnes manquantes)
         if db:
@@ -124,14 +193,33 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
                     models.Utilisateur.id,
                     models.Utilisateur.nom_complet,
                     models.Utilisateur.role,
-                    models.Utilisateur.pin
+                    models.Utilisateur.pin,
+                    models.Utilisateur.etablissement_id
                 ).filter(
                     (models.Utilisateur.id == user_id) | (models.Utilisateur.pin == user_id),
                     models.Utilisateur.est_actif == True
                 ).first()
 
                 if db_user:
-                    return {"id": str(db_user.id), "nom_complet": db_user.nom_complet, "role": db_user.role}
+                    # On retrouve l'organisation_id via l'établissement rattaché (table Etablissement).
+                    organisation_id = None
+                    if db_user.etablissement_id:
+                        try:
+                            etab = db.query(models.Etablissement.organisation_id).filter(
+                                models.Etablissement.id == db_user.etablissement_id
+                            ).first()
+                            if etab:
+                                organisation_id = etab.organisation_id
+                        except Exception as e:
+                            print(f"Avertissement BDD lecture organisation_id: {e}", flush=True)
+
+                    return {
+                        "id": str(db_user.id),
+                        "nom_complet": db_user.nom_complet,
+                        "role": db_user.role,
+                        "etablissement_id": db_user.etablissement_id,
+                        "organisation_id": organisation_id
+                    }
             except Exception as e:
                 print(f"Avertissement BDD get_current_user: {e}", flush=True)
 
@@ -140,7 +228,7 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
             if str(g["id"]) == user_id or str(g["pin"]) == user_id:
                 return g
 
-        return {"id": user_id, "nom_complet": "Super Admin", "role": role}
+        return {"id": user_id, "nom_complet": "Super Admin", "role": role, "etablissement_id": None, "organisation_id": None}
 
     # 3. Recherche directe par PIN brut si non JWT
     for g in DB_GERANTS:
@@ -154,14 +242,6 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
-
-# MODIFICATION 1 : AJOUT DE LA ROUTE DE DÉCONNEXION (/logout)
-@app.get("/logout")
-@app.post("/logout")
-def logout():
-    response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie(key="session_token")
-    return response
 
 @app.post("/login")
 def login(
@@ -224,11 +304,22 @@ def login(
         status_code=400
     )
 
+
+# --- DÉCONNEXION (NOUVEAU) ---
+@app.get("/logout")
+@app.post("/logout")
+def logout():
+    """Supprime le cookie de session et renvoie vers la page de connexion, sans jamais produire de 404."""
+    response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(key="session_token")
+    return response
+
+
 # --- ESPACE DÉVELOPPEUR / FONDATEUR SAAS ---
 @app.get("/admin/plateforme", response_class=HTMLResponse)
 def page_plateforme_admin(
-    request: Request, 
-    session_token: Optional[str] = Cookie(None), 
+    request: Request,
+    session_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
     token_str = session_token or request.cookies.get("session_token")
@@ -236,7 +327,7 @@ def page_plateforme_admin(
 
     # Secours Développeur
     if not user and (token_str == "0000" or request.cookies.get("session_token") == "0000"):
-        user = {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur"}
+        user = {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
     if not user or user.get("role") != "super_admin_fondateur":
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -258,8 +349,8 @@ def page_plateforme_admin(
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 def dashboard(
-    request: Request, 
-    session_token: Optional[str] = Cookie(None), 
+    request: Request,
+    session_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
     token_str = session_token or request.cookies.get("session_token")
@@ -267,21 +358,30 @@ def dashboard(
 
     if not user:
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    redirection = refuser_si_fondateur(user)
+    if redirection:
+        return redirection
 
-    # MODIFICATION 2A : ISOLATION DES CLÔTURES DANS LE DASHBOARD
-    if user.get("role") == "super_admin_fondateur":
-        clotures_visibles = DB_CLOTURES
-    else:
-        clotures_visibles = [c for c in DB_CLOTURES if c.get("gerant") == user.get("nom_complet")]
+    mes_toilettes = filtrer(DB_TOILETTES, user)
+    mes_flats = filtrer(DB_SEJOURS_FLATS, user)
+    mes_comptoir = filtrer(DB_VENTES_COMPTOIR, user)
+    mes_cuisine = filtrer(DB_CUISINE_VENTES, user)
+    mes_salle = filtrer(DB_SALLE_FETES, user)
+    mes_locataires = filtrer(DB_LOCATAIRES, user)
+    mes_depenses_cuisine = filtrer(DB_CUISINE_DEPENSES, user)
+    mes_clotures = filtrer(DB_CLOTURES, user)
+    mes_dettes = filtrer(DB_DETTES, user)
+    mes_etablissements = [e for e in DB_ETABLISSEMENTS if e["id"] in etablissements_autorises(user)]
+    mes_produits = filtrer(DB_COMPTOIR, user)
 
-    recette_toilettes = sum(e.get("montant", 0) for e in DB_TOILETTES)
-    recette_flats = sum(s.get("montant", 0) for s in DB_SEJOURS_FLATS)
-    recette_comptoir = sum(v.get("montant", 0) for v in DB_VENTES_COMPTOIR)
-    recette_cuisine = sum(v.get("montant", 0) for v in DB_CUISINE_VENTES)
-    recette_salle = sum(r.get("montant", 0) for r in DB_SALLE_FETES)
-    recette_locataires = sum(l.get("montant", 0) for l in DB_LOCATAIRES)
+    recette_toilettes = sum(e.get("montant", 0) for e in mes_toilettes)
+    recette_flats = sum(s.get("montant", 0) for s in mes_flats)
+    recette_comptoir = sum(v.get("montant", 0) for v in mes_comptoir)
+    recette_cuisine = sum(v.get("montant", 0) for v in mes_cuisine)
+    recette_salle = sum(r.get("montant", 0) for r in mes_salle)
+    recette_locataires = sum(l.get("montant", 0) for l in mes_locataires)
 
-    alertes_stock = [p for p in DB_COMPTOIR if p.get("quantite_stock", 0) < 5]
+    alertes_stock = [p for p in mes_produits if p.get("quantite_stock", 0) < 5]
 
     return templates.TemplateResponse(
         request=request,
@@ -295,10 +395,10 @@ def dashboard(
             "total_cuisine": recette_cuisine,
             "total_salle": recette_salle,
             "total_locataires": recette_locataires,
-            "etablissements": DB_ETABLISSEMENTS,
-            "clotures": clotures_visibles,
-            "dettes": DB_DETTES,
-            "depenses_cuisine": DB_CUISINE_DEPENSES,
+            "etablissements": mes_etablissements,
+            "clotures": mes_clotures,
+            "dettes": mes_dettes,
+            "depenses_cuisine": mes_depenses_cuisine,
             "alertes_stock": alertes_stock,
             "tarifs": TARIFS_SYSTEME
         }
@@ -314,7 +414,7 @@ def ajuster_tarifs(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     TARIFS_SYSTEME["toilettes_petit"] = toilettes_petit
     TARIFS_SYSTEME["toilettes_grand"] = toilettes_grand
@@ -325,33 +425,39 @@ def ajuster_tarifs(
 @app.get("/etablissements", response_class=HTMLResponse)
 def page_etablissements(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="etablissements.html", context={"user": user, "etablissements": DB_ETABLISSEMENTS})
+    mes_etablissements = [e for e in DB_ETABLISSEMENTS if e["id"] in etablissements_autorises(user)]
+    return templates.TemplateResponse(request=request, name="etablissements.html", context={"user": user, "etablissements": mes_etablissements})
 
 @app.get("/gerants", response_class=HTMLResponse)
 def gerants_page(request: Request, nouveau_pin: Optional[str] = None, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
-    # MODIFICATION 2B : MASQUAGE DU FONDATEUR (0000) ET ISOLATION DES COMPTES CLIENTS
+    # Un super_admin ne voit QUE les gérants de ses propres établissements, et jamais
+    # le compte fondateur (qui n'a de toute façon pas d'etablissement_id).
     mes_gerants = [
-        g for g in DB_GERANTS 
-        if g.get("pin") != "0000" 
-        and g.get("role") != "super_admin_fondateur"
-        and (g.get("id") == user["id"] or g.get("created_by") == user["id"] or user["role"] == "super_admin_fondateur")
+        g for g in DB_GERANTS
+        if g.get("role") != "super_admin_fondateur" and g.get("etablissement_id") in etablissements_autorises(user)
     ]
-
-    return templates.TemplateResponse(request=request, name="gerants.html", context={"user": user, "gerants": mes_gerants, "etablissements": DB_ETABLISSEMENTS, "roles_labels": ROLES_LABELS, "nouveau_pin": nouveau_pin})
+    mes_etablissements = [e for e in DB_ETABLISSEMENTS if e["id"] in etablissements_autorises(user)]
+    return templates.TemplateResponse(request=request, name="gerants.html", context={"user": user, "gerants": mes_gerants, "etablissements": mes_etablissements, "roles_labels": ROLES_LABELS, "nouveau_pin": nouveau_pin})
 
 @app.post("/gerants/creer")
 def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: float = Form(150000.0), etablissement_id: Optional[str] = Form(None), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Sécurité : on force l'établissement choisi à appartenir au périmètre du super_admin
+    # connecté. Impossible de créer un gérant pour un établissement d'une autre entreprise.
+    autorises = etablissements_autorises(user)
+    if etablissement_id not in autorises:
+        etablissement_id = autorises[0] if autorises else None
+
     pin_auto = generate_auto_pin()
-    nom_site = next((s["nom"] for s in DB_ETABLISSEMENTS if s["id"] == etablissement_id), "Tous les sites")
+    nom_site = next((s["nom"] for s in DB_ETABLISSEMENTS if s["id"] == etablissement_id), "Établissement inconnu")
     DB_GERANTS.append({
         "id": str(uuid.uuid4()),
         "nom_complet": nom_complet,
@@ -361,8 +467,8 @@ def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: f
         "salaire": salaire,
         "est_actif": True,
         "etablissement_id": etablissement_id,
-        "etablissement_nom": nom_site,
-        "created_by": user["id"]
+        "organisation_id": user.get("organisation_id"),
+        "etablissement_nom": nom_site
     })
     return RedirectResponse(url=f"/gerants?nouveau_pin={pin_auto}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -370,10 +476,18 @@ def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: f
 @app.post("/gerants/supprimer/{gerant_id}")
 def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    autorises = etablissements_autorises(user)
     global DB_GERANTS
-    DB_GERANTS = [g for g in DB_GERANTS if not (g["id"] == gerant_id and g["role"] != "super_admin")]
+    DB_GERANTS = [
+        g for g in DB_GERANTS
+        if not (
+            g["id"] == gerant_id
+            and g["role"] != "super_admin"
+            and g.get("etablissement_id") in autorises  # on ne peut désactiver que SES gérants
+        )
+    ]
     return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- MODULE FLATS & CHAMBRES ---
@@ -381,27 +495,30 @@ def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)
 @app.get("/flat", response_class=HTMLResponse)
 def flats_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    
+
+    mes_chambres = filtrer(DB_CHAMBRES, user)
+    mes_sejours = filtrer(DB_SEJOURS_FLATS, user)
+
     return templates.TemplateResponse(
-        request=request, 
-        name="flats.html", 
+        request=request,
+        name="flats.html",
         context={
-            "user": user, 
-            "chambres": DB_CHAMBRES, 
+            "user": user,
+            "chambres": mes_chambres,
             "tarif_heure": TARIFS_SYSTEME["flat_heure"],
-            "total_flats": sum(s["montant"] for s in DB_SEJOURS_FLATS)
+            "total_flats": sum(s["montant"] for s in mes_sejours)
         }
     )
 
 @app.get("/flats/chambre/statut/{chambre_id}/{nouveau_statut}")
 def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id:
+        if ch["id"] == chambre_id and dans_perimetre(ch, user):
             if nouveau_statut in ["libre", "hors_service"]:
                 ch["statut"] = nouveau_statut
                 if nouveau_statut == "hors_service":
@@ -413,13 +530,18 @@ def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: 
 @app.post("/flats/chambre/creer")
 def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form(None), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    nouvel_id = str(len(DB_CHAMBRES) + 1)
+
+    autorises = etablissements_autorises(user)
+    mon_etablissement = autorises[0] if autorises else None
+
+    nouvel_id = str(uuid.uuid4())
     tarif = prix_par_heure if prix_par_heure else TARIFS_SYSTEME["flat_heure"]
-    
+
     DB_CHAMBRES.append({
         "id": nouvel_id,
+        "etablissement_id": mon_etablissement,
         "nom": nom.strip(),
         "statut": "libre",
         "prix_par_heure": tarif,
@@ -431,36 +553,43 @@ def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form
 @app.post("/flats/chambre/modifier")
 def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id:
+        if ch["id"] == chambre_id and dans_perimetre(ch, user):
             ch["nom"] = nouveau_nom.strip()
             break
-            
+
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/occuper")
 def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...), duree: int = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and ch["statut"] == "libre":
+        if ch["id"] == chambre_id and ch["statut"] == "libre" and dans_perimetre(ch, user):
             ch["statut"] = "occupee"
             ch["montant_recu"] = montant_percu
             ch["duree"] = duree
-            DB_SEJOURS_FLATS.insert(0, {"chambre": ch["nom"], "montant": montant_percu, "duree": duree, "gerant": user["nom_complet"], "heure": datetime.now().strftime("%H:%M:%S")})
+            DB_SEJOURS_FLATS.insert(0, {
+                "etablissement_id": ch["etablissement_id"],
+                "chambre": ch["nom"],
+                "montant": montant_percu,
+                "duree": duree,
+                "gerant": user["nom_complet"],
+                "heure": datetime.now().strftime("%H:%M:%S")
+            })
             break
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/flats/liberer/{chambre_id}")
 def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_flats", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and ch["statut"] == "occupee":
+        if ch["id"] == chambre_id and ch["statut"] == "occupee" and dans_perimetre(ch, user):
             ch["statut"] = "libre"
             ch["montant_recu"] = 0.0
             ch["duree"] = 0
@@ -471,16 +600,18 @@ def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)
 @app.get("/comptoir", response_class=HTMLResponse)
 def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    mes_produits = filtrer(DB_COMPTOIR, user)
+    mes_ventes = filtrer(DB_VENTES_COMPTOIR, user)
     return templates.TemplateResponse(
-        request=request, 
-        name="comptoir.html", 
+        request=request,
+        name="comptoir.html",
         context={
-            "user": user, 
-            "produits": DB_COMPTOIR, 
-            "ventes": DB_VENTES_COMPTOIR,
-            "total_ventes": sum(v["montant"] for v in DB_VENTES_COMPTOIR),
+            "user": user,
+            "produits": mes_produits,
+            "ventes": mes_ventes,
+            "total_ventes": sum(v["montant"] for v in mes_ventes),
             "erreur_stock": None
         }
     )
@@ -488,24 +619,27 @@ def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None),
 @app.get("/comptoir/vendre_une/{produit_id}")
 def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     for p in DB_COMPTOIR:
-        if p["id"] == produit_id:
+        if p["id"] == produit_id and dans_perimetre(p, user):
             if p["quantite_stock"] <= 0:
+                mes_produits = filtrer(DB_COMPTOIR, user)
+                mes_ventes = filtrer(DB_VENTES_COMPTOIR, user)
                 return templates.TemplateResponse(
                     request=request,
                     name="comptoir.html",
                     context={
                         "user": user,
-                        "produits": DB_COMPTOIR,
-                        "ventes": DB_VENTES_COMPTOIR,
-                        "total_ventes": sum(v["montant"] for v in DB_VENTES_COMPTOIR),
+                        "produits": mes_produits,
+                        "ventes": mes_ventes,
+                        "total_ventes": sum(v["montant"] for v in mes_ventes),
                         "erreur_stock": f"Stock épuisé pour '{p['nom']}' ! Veuillez réapprovisionner."
                     }
                 )
             p["quantite_stock"] -= 1
             DB_VENTES_COMPTOIR.insert(0, {
+                "etablissement_id": p["etablissement_id"],
                 "produit": p["nom"],
                 "quantite": 1,
                 "montant": p["prix_vente"],
@@ -518,12 +652,13 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
 @app.post("/comptoir/ajouter_stock")
 def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...), nombre_casiers: int = Form(...), prix_achat_casier: float = Form(...), prix_vente_bouteille: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_comptoir", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     nouvelles_bouteilles = unites_par_casier * nombre_casiers
     trouve = False
+    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
     for p in DB_COMPTOIR:
-        if p["nom"].strip().lower() == nom.strip().lower():
+        if p["nom"].strip().lower() == nom.strip().lower() and dans_perimetre(p, user):
             p["quantite_stock"] += nouvelles_bouteilles
             p["prix_achat_casier"] = prix_achat_casier
             p["prix_vente"] = prix_vente_bouteille
@@ -532,6 +667,7 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
     if not trouve:
         DB_COMPTOIR.append({
             "id": str(uuid.uuid4()),
+            "etablissement_id": mon_etablissement,
             "nom": nom.strip(),
             "unites_par_casier": unites_par_casier,
             "prix_achat_casier": prix_achat_casier,
@@ -544,19 +680,22 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
 @app.get("/cuisine", response_class=HTMLResponse)
 def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    total_v = sum(v["montant"] for v in DB_CUISINE_VENTES)
-    total_d = sum(d["montant"] for d in DB_CUISINE_DEPENSES)
+    mes_menu = filtrer(DB_CUISINE_MENU, user)
+    mes_ventes = filtrer(DB_CUISINE_VENTES, user)
+    mes_depenses = filtrer(DB_CUISINE_DEPENSES, user)
+    total_v = sum(v["montant"] for v in mes_ventes)
+    total_d = sum(d["montant"] for d in mes_depenses)
     return templates.TemplateResponse(
-        request=request, 
-        name="cuisine.html", 
+        request=request,
+        name="cuisine.html",
         context={
-            "user": user, 
-            "menu": DB_CUISINE_MENU,
-            "ventes": DB_CUISINE_VENTES,
-            "depenses": DB_CUISINE_DEPENSES,
-            "total_ventes": total_v, 
+            "user": user,
+            "menu": mes_menu,
+            "ventes": mes_ventes,
+            "depenses": mes_depenses,
+            "total_ventes": total_v,
             "total_depenses": total_d,
             "benefice_net": total_v - total_d
         }
@@ -565,12 +704,13 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), 
 @app.post("/cuisine/vendre_combinaison")
 async def vendre_combinaison(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     form_data = await request.form()
+    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
     details_plat = []
     total_plat = 0.0
-    for m in DB_CUISINE_MENU:
+    for m in filtrer(DB_CUISINE_MENU, user):
         qty_key = f"qty_{m['id']}"
         if qty_key in form_data and form_data[qty_key]:
             try:
@@ -584,6 +724,7 @@ async def vendre_combinaison(request: Request, session_token: Optional[str] = Co
     if details_plat:
         description_complet = " + ".join(details_plat)
         DB_CUISINE_VENTES.insert(0, {
+            "etablissement_id": mon_etablissement,
             "plat": description_complet,
             "montant": total_plat,
             "heure": datetime.now().strftime("%H:%M:%S"),
@@ -594,12 +735,14 @@ async def vendre_combinaison(request: Request, session_token: Optional[str] = Co
 @app.post("/cuisine/menu/ajouter")
 def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str = Form("morceau"), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    
+    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
+
     DB_CUISINE_MENU.append({
-        "id": str(uuid.uuid4()), 
-        "nom": nom.strip(), 
+        "id": str(uuid.uuid4()),
+        "etablissement_id": mon_etablissement,
+        "nom": nom.strip(),
         "prix": prix,
         "unite": unite.strip()
     })
@@ -608,9 +751,11 @@ def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str 
 @app.post("/cuisine/depense")
 def enregistrer_depense_cuisine(description: str = Form(...), montant: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["cuisinier", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
     DB_CUISINE_DEPENSES.insert(0, {
+        "etablissement_id": mon_etablissement,
         "description": description.strip(),
         "montant": montant,
         "heure": datetime.now().strftime("%H:%M:%S"),
@@ -622,58 +767,82 @@ def enregistrer_depense_cuisine(description: str = Form(...), montant: float = F
 @app.get("/salle", response_class=HTMLResponse)
 def salle_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_salle", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_salle", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="salle.html", context={"user": user, "reservations": DB_SALLE_FETES, "total_salle": sum(r["montant"] for r in DB_SALLE_FETES)})
+    mes_reservations = filtrer(DB_SALLE_FETES, user)
+    return templates.TemplateResponse(request=request, name="salle.html", context={"user": user, "reservations": mes_reservations, "total_salle": sum(r["montant"] for r in mes_reservations)})
 
 @app.get("/locataires", response_class=HTMLResponse)
 def locataires_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_locataires", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_locataires", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="locataires.html", context={"user": user, "locataires": DB_LOCATAIRES, "total_locataires": sum(l["montant"] for l in DB_LOCATAIRES)})
+    mes_locataires = filtrer(DB_LOCATAIRES, user)
+    return templates.TemplateResponse(request=request, name="locataires.html", context={"user": user, "locataires": mes_locataires, "total_locataires": sum(l["montant"] for l in mes_locataires)})
 
 # --- MODULE TOILETTES ---
 @app.get("/toilettes", response_class=HTMLResponse)
 def toilettes_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_toilettes", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request=request, name="toilettes.html", context={"user": user, "total_toilettes": sum(e["montant"] for e in DB_TOILETTES), "passages": DB_TOILETTES, "tarif_petit": TARIFS_SYSTEME["toilettes_petit"], "tarif_grand": TARIFS_SYSTEME["toilettes_grand"], "tarif_heure": TARIFS_SYSTEME["flat_heure"]})
+    mes_passages = filtrer(DB_TOILETTES, user)
+    return templates.TemplateResponse(request=request, name="toilettes.html", context={"user": user, "total_toilettes": sum(e["montant"] for e in mes_passages), "passages": mes_passages, "tarif_petit": TARIFS_SYSTEME["toilettes_petit"], "tarif_grand": TARIFS_SYSTEME["toilettes_grand"], "tarif_heure": TARIFS_SYSTEME["flat_heure"]})
 
 @app.post("/toilettes/encaisser")
 def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["gerant_toilettes", "super_admin", "super_admin_fondateur"]:
+    if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
     type_besoin = "Petit besoin" if montant == TARIFS_SYSTEME["toilettes_petit"] else "Grand besoin"
-    DB_TOILETTES.insert(0, {"id": str(uuid.uuid4()), "montant": montant, "type_besoin": type_besoin, "gerant": user["nom_complet"], "heure": datetime.now().strftime("%H:%M:%S")})
+    DB_TOILETTES.insert(0, {
+        "id": str(uuid.uuid4()),
+        "etablissement_id": mon_etablissement,
+        "montant": montant,
+        "type_besoin": type_besoin,
+        "gerant": user["nom_complet"],
+        "heure": datetime.now().strftime("%H:%M:%S")
+    })
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- CLÔTURE ISOLÉE PAR GÉRANT ---
+# --- CLÔTURE ISOLÉE PAR GÉRANT ET PAR ÉTABLISSEMENT ---
 @app.get("/cloture", response_class=HTMLResponse)
 def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    redirection = refuser_si_fondateur(user)
+    if redirection:
+        return redirection
+
     if user["role"] == "gerant_toilettes":
-        total_attendu = sum(e["montant"] for e in DB_TOILETTES)
+        total_attendu = sum(e["montant"] for e in filtrer(DB_TOILETTES, user))
     elif user["role"] == "gerant_flats":
-        total_attendu = sum(s["montant"] for s in DB_SEJOURS_FLATS)
+        total_attendu = sum(s["montant"] for s in filtrer(DB_SEJOURS_FLATS, user))
     elif user["role"] == "gerant_comptoir":
-        total_attendu = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
+        total_attendu = sum(v["montant"] for v in filtrer(DB_VENTES_COMPTOIR, user))
     elif user["role"] == "cuisinier":
-        total_attendu = sum(v["montant"] for v in DB_CUISINE_VENTES)
+        total_attendu = sum(v["montant"] for v in filtrer(DB_CUISINE_VENTES, user))
     elif user["role"] == "gerant_salle":
-        total_attendu = sum(r["montant"] for r in DB_SALLE_FETES)
+        total_attendu = sum(r["montant"] for r in filtrer(DB_SALLE_FETES, user))
     elif user["role"] == "gerant_locataires":
-        total_attendu = sum(l["montant"] for l in DB_LOCATAIRES)
+        total_attendu = sum(l["montant"] for l in filtrer(DB_LOCATAIRES, user))
+    else:  # super_admin : tout SON périmètre (ses établissements), jamais celui des autres entreprises
+        total_attendu = (
+            sum(e["montant"] for e in filtrer(DB_TOILETTES, user))
+            + sum(s["montant"] for s in filtrer(DB_SEJOURS_FLATS, user))
+            + sum(v["montant"] for v in filtrer(DB_VENTES_COMPTOIR, user))
+            + sum(v["montant"] for v in filtrer(DB_CUISINE_VENTES, user))
+            + sum(r["montant"] for r in filtrer(DB_SALLE_FETES, user))
+            + sum(l["montant"] for l in filtrer(DB_LOCATAIRES, user))
+        )
+
+    if user["role"] == "super_admin":
+        mes_clotures = filtrer(DB_CLOTURES, user)
     else:
-        total_attendu = sum(e["montant"] for e in DB_TOILETTES) + sum(s["montant"] for s in DB_SEJOURS_FLATS) + sum(v["montant"] for v in DB_VENTES_COMPTOIR) + sum(v["montant"] for v in DB_CUISINE_VENTES) + sum(r["montant"] for r in DB_SALLE_FETES) + sum(l["montant"] for l in DB_LOCATAIRES)
-    if user["role"] in ["super_admin", "super_admin_fondateur"]:
-        mes_clotures = DB_CLOTURES
-    else:
-        mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
+        mes_clotures = [c for c in filtrer(DB_CLOTURES, user) if c["gerant"] == user["nom_complet"]]
+
     return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "clotures": mes_clotures, "message": None})
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
@@ -681,57 +850,81 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
     user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    redirection = refuser_si_fondateur(user)
+    if redirection:
+        return redirection
+
+    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
+    autorises = etablissements_autorises(user)
+
     global DB_TOILETTES, DB_SEJOURS_FLATS, DB_VENTES_COMPTOIR, DB_CUISINE_VENTES, DB_CUISINE_DEPENSES, DB_SALLE_FETES, DB_LOCATAIRES
+
+    def retirer_de(liste):
+        """Retire uniquement les enregistrements du périmètre de l'utilisateur, en gardant ceux des autres établissements/entreprises intacts."""
+        a_garder = [x for x in liste if x.get("etablissement_id") not in autorises]
+        a_cloturer = [x for x in liste if x.get("etablissement_id") in autorises]
+        liste.clear()
+        liste.extend(a_garder)
+        return a_cloturer
+
     if user["role"] == "gerant_toilettes":
-        total_attendu = sum(e["montant"] for e in DB_TOILETTES)
+        clotures_items = retirer_de(DB_TOILETTES)
+        total_attendu = sum(e["montant"] for e in clotures_items)
         detail_txt = f"Toilettes: {total_attendu:,.0f} FC"
-        DB_TOILETTES.clear()
     elif user["role"] == "gerant_flats":
-        total_attendu = sum(s["montant"] for s in DB_SEJOURS_FLATS)
+        clotures_items = retirer_de(DB_SEJOURS_FLATS)
+        total_attendu = sum(s["montant"] for s in clotures_items)
         detail_txt = f"Flats: {total_attendu:,.0f} FC"
-        DB_SEJOURS_FLATS.clear()
         for ch in DB_CHAMBRES:
-            if ch["statut"] == "occupee":
+            if ch["statut"] == "occupee" and dans_perimetre(ch, user):
                 ch["statut"] = "libre"
                 ch["montant_recu"] = 0.0
                 ch["duree"] = 0
     elif user["role"] == "gerant_comptoir":
-        total_attendu = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
+        clotures_items = retirer_de(DB_VENTES_COMPTOIR)
+        total_attendu = sum(v["montant"] for v in clotures_items)
         detail_txt = f"Comptoir: {total_attendu:,.0f} FC"
-        DB_VENTES_COMPTOIR.clear()
     elif user["role"] == "cuisinier":
-        total_attendu = sum(v["montant"] for v in DB_CUISINE_VENTES)
+        clotures_items = retirer_de(DB_CUISINE_VENTES)
+        retirer_de(DB_CUISINE_DEPENSES)
+        total_attendu = sum(v["montant"] for v in clotures_items)
         detail_txt = f"Cuisine: {total_attendu:,.0f} FC"
-        DB_CUISINE_VENTES.clear()
-        DB_CUISINE_DEPENSES.clear()
     elif user["role"] == "gerant_salle":
-        total_attendu = sum(r["montant"] for r in DB_SALLE_FETES)
+        clotures_items = retirer_de(DB_SALLE_FETES)
+        total_attendu = sum(r["montant"] for r in clotures_items)
         detail_txt = f"Salle de Fêtes: {total_attendu:,.0f} FC"
-        DB_SALLE_FETES.clear()
     elif user["role"] == "gerant_locataires":
-        total_attendu = sum(l["montant"] for l in DB_LOCATAIRES)
+        clotures_items = retirer_de(DB_LOCATAIRES)
+        total_attendu = sum(l["montant"] for l in clotures_items)
         detail_txt = f"Locataires: {total_attendu:,.0f} FC"
-        DB_LOCATAIRES.clear()
-    else:
-        t_toil = sum(e["montant"] for e in DB_TOILETTES)
-        t_flat = sum(s["montant"] for s in DB_SEJOURS_FLATS)
-        t_comp = sum(v["montant"] for v in DB_VENTES_COMPTOIR)
-        t_cuis = sum(v["montant"] for v in DB_CUISINE_VENTES)
-        t_sall = sum(r["montant"] for r in DB_SALLE_FETES)
-        t_loca = sum(l["montant"] for l in DB_LOCATAIRES)
+    else:  # super_admin : clôture globale de SON périmètre uniquement
+        t_toil_items = retirer_de(DB_TOILETTES)
+        t_flat_items = retirer_de(DB_SEJOURS_FLATS)
+        t_comp_items = retirer_de(DB_VENTES_COMPTOIR)
+        t_cuis_items = retirer_de(DB_CUISINE_VENTES)
+        retirer_de(DB_CUISINE_DEPENSES)
+        t_sall_items = retirer_de(DB_SALLE_FETES)
+        t_loca_items = retirer_de(DB_LOCATAIRES)
+        for ch in DB_CHAMBRES:
+            if ch["statut"] == "occupee" and dans_perimetre(ch, user):
+                ch["statut"] = "libre"
+                ch["montant_recu"] = 0.0
+                ch["duree"] = 0
+
+        t_toil = sum(e["montant"] for e in t_toil_items)
+        t_flat = sum(s["montant"] for s in t_flat_items)
+        t_comp = sum(v["montant"] for v in t_comp_items)
+        t_cuis = sum(v["montant"] for v in t_cuis_items)
+        t_sall = sum(r["montant"] for r in t_sall_items)
+        t_loca = sum(l["montant"] for l in t_loca_items)
         total_attendu = t_toil + t_flat + t_comp + t_cuis + t_sall + t_loca
         detail_txt = f"Toilettes: {t_toil:,.0f} FC | Flats: {t_flat:,.0f} FC | Comptoir: {t_comp:,.0f} FC | Cuisine: {t_cuis:,.0f} FC | Salle: {t_sall:,.0f} FC | Locataires: {t_loca:,.0f} FC"
-        DB_TOILETTES.clear()
-        DB_SEJOURS_FLATS.clear()
-        DB_VENTES_COMPTOIR.clear()
-        DB_CUISINE_VENTES.clear()
-        DB_CUISINE_DEPENSES.clear()
-        DB_SALLE_FETES.clear()
-        DB_LOCATAIRES.clear()
+
     ecart = montant_compte - total_attendu
     maintenant = datetime.now()
     DB_CLOTURES.insert(0, {
         "id": str(uuid.uuid4()),
+        "etablissement_id": mon_etablissement,
         "date": maintenant.strftime("%d/%m/%Y"),
         "heure": maintenant.strftime("%H:%M:%S"),
         "gerant": user["nom_complet"],
@@ -741,13 +934,15 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         "ecart": ecart,
         "detail": detail_txt
     })
-    if user["role"] in ["super_admin", "super_admin_fondateur"]:
-        mes_clotures = DB_CLOTURES
+
+    if user["role"] == "super_admin":
+        mes_clotures = filtrer(DB_CLOTURES, user)
     else:
-        mes_clotures = [c for c in DB_CLOTURES if c["gerant"] == user["nom_complet"]]
+        mes_clotures = [c for c in filtrer(DB_CLOTURES, user) if c["gerant"] == user["nom_complet"]]
+
     return templates.TemplateResponse(
         request=request,
-        name="cloture.html", 
+        name="cloture.html",
         context={"user": user, "total_attendu": 0.0, "clotures": mes_clotures, "message": f"Service clôturé avec succès ! Recette ({montant_compte:,.0f} FC) envoyée aux archives de la direction."}
     )
 
@@ -770,7 +965,7 @@ def register_client(
 ):
     email_clean = email.strip().lower()
     code_otp = str(random.randint(100000, 999999))
-    
+
     DB_OTP_TEMP[email_clean] = {
         "code": code_otp,
         "expire": datetime.utcnow() + timedelta(minutes=15),
@@ -901,7 +1096,13 @@ def valider_otp(
             db.rollback()
             print(f"=== AVERTISSEMENT BDD (Fallback memoire active) : {e} ===", flush=True)
 
-    # 2. ENREGISTREMENT SYSTÉMATIQUE DANS DB_GERANTS (Accès immédiat garanti)
+    # 2. ENREGISTREMENT SYSTÉMATIQUE DANS DB_GERANTS ET DB_ETABLISSEMENTS (Accès immédiat garanti)
+    DB_ETABLISSEMENTS.append({
+        "id": new_etab_id,
+        "organisation_id": new_org_id,
+        "nom": nom_entreprise,
+        "est_actif": True
+    })
     DB_GERANTS.append({
         "id": new_user_id,
         "nom_complet": nom_proprio,
@@ -911,8 +1112,8 @@ def valider_otp(
         "salaire": 0.0,
         "est_actif": True,
         "etablissement_id": new_etab_id,
-        "etablissement_nom": nom_entreprise,
-        "created_by": new_user_id
+        "organisation_id": new_org_id,
+        "etablissement_nom": nom_entreprise
     })
 
     # Nettoyage OTP
@@ -922,7 +1123,7 @@ def valider_otp(
 
 @app.get("/admin/plateforme/toggle/{org_id}")
 def changer_statut_organisation(
-    org_id: str, 
+    org_id: str,
     session_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):

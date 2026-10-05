@@ -9,7 +9,7 @@ class Organisation(Base):
     __tablename__ = "organisations"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    nom_entreprise = Column(String, nullable=False) # ex: "Complexe Le Palmier"
+    nom_entreprise = Column(String, nullable=False)
     nom_proprietaire = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     telephone = Column(String, nullable=True)
@@ -19,12 +19,13 @@ class Organisation(Base):
 
     etablissements = relationship("Etablissement", back_populates="organisation")
 
+
 class Etablissement(Base):
     __tablename__ = "etablissements"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    organisation_id = Column(String, ForeignKey("organisations.id"), nullable=True) # Rattaché à l'organisation client
-    nom = Column(String, nullable=False)  # ex: "Emmanuel - Bandal", "Emmanuel - Tchangu"
+    organisation_id = Column(String, ForeignKey("organisations.id"), nullable=True)
+    nom = Column(String, nullable=False)
     est_actif = Column(Boolean, default=True)
 
     organisation = relationship("Organisation", back_populates="etablissements")
@@ -32,14 +33,15 @@ class Etablissement(Base):
     chambres = relationship("Chambre", back_populates="etablissement")
     produits = relationship("Produit", back_populates="etablissement")
     clotures = relationship("Cloture", back_populates="etablissement")
+    plats_menu = relationship("PlatMenu", back_populates="etablissement")
+
 
 class Utilisateur(Base):
     __tablename__ = "utilisateurs"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     nom_complet = Column(String, nullable=False)
-    # super_admin_fondateur, super_admin, gerant_toilettes, gerant_flats, gerant_comptoir, cuisinier, gerant_salle, gerant_locataires
-    role = Column(String, nullable=False)  
+    role = Column(String, nullable=False)
     role_label = Column(String, nullable=False)
     pin = Column(String, nullable=False)
     salaire = Column(Float, default=0.0)
@@ -47,6 +49,7 @@ class Utilisateur(Base):
     etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=True)
 
     etablissement = relationship("Etablissement", back_populates="utilisateurs")
+
 
 class Chambre(Base):
     __tablename__ = "chambres"
@@ -61,6 +64,7 @@ class Chambre(Base):
 
     etablissement = relationship("Etablissement", back_populates="chambres")
 
+
 class Produit(Base):
     __tablename__ = "produits"
 
@@ -74,6 +78,20 @@ class Produit(Base):
 
     etablissement = relationship("Etablissement", back_populates="produits")
 
+
+class PlatMenu(Base):
+    """Le menu de la cuisine (NOUVEAU : avant en mémoire seulement, maintenant persisté)."""
+    __tablename__ = "plats_menu"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    nom = Column(String, nullable=False)
+    prix = Column(Float, nullable=False)
+    unite = Column(String, default="morceau")
+    etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
+
+    etablissement = relationship("Etablissement", back_populates="plats_menu")
+
+
 class Vente(Base):
     __tablename__ = "ventes"
 
@@ -85,6 +103,11 @@ class Vente(Base):
     gerant_nom = Column(String, nullable=False)
     date_vente = Column(DateTime, default=datetime.utcnow)
     etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
+    # NOUVEAU : tant que c'est NULL, la vente n'a pas encore été clôturée (elle compte dans
+    # le "total attendu" du gérant). Une fois clôturée, on y met l'id de la clôture -
+    # la ligne reste pour toujours dans l'historique, elle n'est jamais supprimée.
+    cloture_id = Column(String, ForeignKey("clotures.id"), nullable=True)
+
 
 class Depense(Base):
     __tablename__ = "depenses"
@@ -95,6 +118,8 @@ class Depense(Base):
     gerant_nom = Column(String, nullable=False)
     date_depense = Column(DateTime, default=datetime.utcnow)
     etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
+    cloture_id = Column(String, ForeignKey("clotures.id"), nullable=True)
+
 
 class Cloture(Base):
     __tablename__ = "clotures"
