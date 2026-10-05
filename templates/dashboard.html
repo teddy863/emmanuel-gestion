@@ -198,29 +198,29 @@
 
     
 
-    <!-- Historique en direct des clôtures d'activités des gérants -->
-    <div class="section-title">RAPPORTS DE CLÔTURES DES GÉRANTS (RÉSEAU)</div>
-    <div class="card-form" style="padding: 12px; gap: 8px;">
-      {% for c in clotures %}
-        <div class="archive-item">
-          <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 900;">
-            <span style="color: #64B5F6;">📅 {{ c.date }} à {{ c.heure }}</span>
-            <span style="color: #32D785;">{{ "{:,.0f}".format(c.montant_compte).replace(',', ' ') }} FC</span>
-          </div>
-          <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">
-            Gérant : <b>{{ c.gerant }}</b> ({{ c.role_label }}) · Attendu : {{ "{:,.0f}".format(c.montant_attendu).replace(',', ' ') }} FC · Écart : <b style="color: {% if c.ecart < 0 %}#FF8888{% else %}#32D785{% endif %};">{{ "{:,.0f}".format(c.ecart).replace(',', ' ') }} FC</b>
-          </div>
-          <div style="font-size: 10px; color: #A4D7F8; margin-top: 2px;">
-            {{ c.detail }}
-          </div>
-        </div>
-      {% else %}
-        <div style="text-align: center; color: var(--muted); font-size: 12px; padding: 8px;">
-          Aucune clôture de gérant enregistrée pour le moment.
-        </div>
-      {% endfor %}
-    </div>
+    <!-- RAPPORTS ET ARCHIVES DES CLÔTURES DES GÉRANTS -->
+<div class="section-title">DOSSIER ET ARCHIVES DES CLÔTURES (RÉSEAU)</div>
+<div class="card-form" style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+  
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 13px; font-weight: bold; color: #FFF;">
+      📂 Dossier des rapports de caisse
+    </span>
+    <span style="background: #0077B6; color: #FFF; font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 20px;">
+      {{ clotures|length }} clôture(s)
+    </span>
+  </div>
 
+  <div style="font-size: 11px; color: var(--muted);">
+    Toutes les clôtures journalières validées par vos gérants sont archivées et sécurisées dans ce dossier.
+  </div>
+
+  <!-- Bouton pour ouvrir le dossier complet des clôtures -->
+  <a href="/cloture" style="display: block; text-align: center; background: #1C2732; color: #64B5F6; border: 1px solid #2A3847; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 800; text-decoration: none; text-transform: uppercase;">
+    🔍 Accéder au dossier des clôtures
+  </a>
+
+</div>
     <!-- Suivi des dettes enregistrées -->
     {% if dettes %}
       <div class="section-title">DETTES ET CRÉDITS EN COURS</div>
