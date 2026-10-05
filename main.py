@@ -828,64 +828,74 @@ def valider_otp(
             context={"email": email_clean, "error": "Code OTP incorrect."}
         )
 
-    try:
-        # Enregistrement Organisation BDD
-        nouvelle_org = models.Organisation(
-            nom_entreprise=data["nom_entreprise"],
-            nom_proprietaire=data["nom_proprietaire"],
-            email=email_clean,
-            telephone=data["telephone"],
-            est_active=True,
-            est_en_essai=True
-        )
-        db.add(nouvelle_org)
-        db.commit()
-        db.refresh(nouvelle_org)
+    new_user_id = str(uuid.uuid4())
+    new_org_id = str(uuid.uuid4())
+    new_etab_id = str(uuid.uuid4())
+    pin_client = data["pin"]
+    nom_proprio = data["nom_proprietaire"]
+    nom_entreprise = data["nom_entreprise"]
 
-        # Enregistrement Établissement
-        etab_args = {"organisation_id": nouvelle_org.id, "est_actif": True}
-        if hasattr(models.Etablissement, 'nom'):
-            etab_args['nom'] = data["nom_entreprise"]
+    # 1. TENTATIVE DE SAUVEGARDE EN BDD SUPABASE
+    if db:
+        try:
+            # Insertion Organisation
+            nouvelle_org = models.Organisation(
+                id=new_org_id,
+                nom_entreprise=nom_entreprise,
+                nom_proprietaire=nom_proprio,
+                email=email_clean,
+                telephone=data["telephone"],
+                est_active=True,
+                est_en_essai=True
+            )
+            db.add(nouvelle_org)
+            db.commit()
 
-        nouvel_etablissement = models.Etablissement(**etab_args)
-        db.add(nouvel_etablissement)
-        db.commit()
-        db.refresh(nouvel_etablissement)
+            # Insertion Établissement
+            etab_args = {"id": new_etab_id, "organisation_id": new_org_id, "est_actif": True}
+            if hasattr(models.Etablissement, 'nom'):
+                etab_args['nom'] = nom_entreprise
+            nouvel_etablissement = models.Etablissement(**etab_args)
+            db.add(nouvel_etablissement)
+            db.commit()
 
-        # Enregistrement Utilisateur Admin
-        admin_user = models.Utilisateur(
-            nom_complet=data["nom_proprietaire"],
-            role="super_admin",
-            role_label="Propriétaire / Admin",
-            pin=data["pin"],
-            est_actif=True,
-            etablissement_id=nouvel_etablissement.id
-        )
-        db.add(admin_user)
-        db.commit()
+            # Insertion SQL directe de l'Utilisateur (pour bypasser le bug de colonne 'salaire')
+            from sqlalchemy import text
+            sql_insert = text("""
+                INSERT INTO utilisateurs (id, nom_complet, role, role_label, pin, est_actif, etablissement_id)
+                VALUES (:id, :nom_complet, :role, :role_label, :pin, :est_actif, :etablissement_id)
+            """)
+            db.execute(sql_insert, {
+                "id": new_user_id,
+                "nom_complet": nom_proprio,
+                "role": "super_admin",
+                "role_label": "Propriétaire / Admin",
+                "pin": pin_client,
+                "est_actif": True,
+                "etablissement_id": new_etab_id
+            })
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"=== AVERTISSEMENT BDD (Fallback memoire active) : {e} ===", flush=True)
 
-        del DB_OTP_TEMP[email_clean]
-        return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
+    # 2. ENREGISTREMENT SYSTÉMATIQUE DANS DB_GERANTS (Accès immédiat garanti)
+    DB_GERANTS.append({
+        "id": new_user_id,
+        "nom_complet": nom_proprio,
+        "role": "super_admin",
+        "role_label": "Propriétaire / Admin",
+        "pin": pin_client,
+        "salaire": 0.0,
+        "est_actif": True,
+        "etablissement_id": new_etab_id,
+        "etablissement_nom": nom_entreprise
+    })
 
-    except Exception as e:
-        db.rollback()
-        print(f"=== ERREUR BDD CREATION COMPTE : {e} ===", flush=True)
+    # Nettoyage OTP
+    del DB_OTP_TEMP[email_clean]
 
-        # Secours mémoire immédiat si échec BDD
-        pin_client = data["pin"]
-        DB_GERANTS.append({
-            "id": str(uuid.uuid4()),
-            "nom_complet": data["nom_proprietaire"],
-            "role": "super_admin",
-            "role_label": "Propriétaire / Admin",
-            "pin": pin_client,
-            "salaire": 0.0,
-            "est_actif": True,
-            "etablissement_id": None,
-            "etablissement_nom": data["nom_entreprise"]
-        })
-        del DB_OTP_TEMP[email_clean]
-        return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/admin/plateforme/toggle/{org_id}")
 def changer_statut_organisation(
