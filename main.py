@@ -2,13 +2,11 @@ import uuid
 import random
 from datetime import datetime, timedelta
 from typing import Optional
-
 from fastapi import FastAPI, Request, Form, status, Cookie, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-
 from database import engine, Base, get_db
 import models
 import crud
@@ -39,15 +37,19 @@ ROLES_LABELS = {
     "gerant_locataires": "Gérant Locataires"
 }
 
-# Rôles qui gèrent un poste précis (par opposition au super_admin, qui voit tout son établissement/organisation)
 ROLES_GERANTS_POSTE = set(ROLES_LABELS.keys())
 
+# Mapping des redirections automatiques par rôle
+ROLE_REDIRECT_MAP = {
+    "gerant_toilettes": "/toilettes",
+    "gerant_flats": "/flats",
+    "gerant_comptoir": "/comptoir",
+    "cuisinier": "/cuisine",
+    "gerant_salle": "/salle",
+    "gerant_locataires": "/locataires"
+}
+
 # --- DONNÉES EN MÉMOIRE POUR LES SITES EXISTANTS ---
-# NOTE IMPORTANTE : chaque établissement appartient désormais à une "organisation_id".
-# C'est cette organisation_id qui représente une ENTREPRISE CLIENTE du SaaS (le vrai
-# périmètre d'isolation pour un super_admin, qui peut avoir plusieurs établissements/sites).
-# Un gérant d'exploitation (toilettes, flats, comptoir, cuisine, salle, locataires), lui,
-# reste limité à son seul etablissement_id.
 DB_ETABLISSEMENTS = [
     {"id": "site_1", "organisation_id": "org_demo_emmanuel", "nom": "Emmanuel - Bandal", "est_actif": True},
     {"id": "site_2", "organisation_id": "org_demo_emmanuel", "nom": "Emmanuel - Tchangu", "est_actif": True}
@@ -70,7 +72,6 @@ TARIFS_SYSTEME = {
     "flat_heure": 5000.0
 }
 
-# Chaque enregistrement créé dans ces listes porte désormais un champ "etablissement_id".
 DB_TOILETTES = []
 DB_SEJOURS_FLATS = []
 DB_VENTES_COMPTOIR = []
@@ -81,7 +82,6 @@ DB_LOCATAIRES = []
 DB_DETTES = []
 DB_CLOTURES = []
 
-# Les chambres, produits et menu sont aussi des ressources propres à un établissement.
 DB_CHAMBRES = [
     {"id": "1", "etablissement_id": "site_1", "nom": "Ch. 1", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
     {"id": "2", "etablissement_id": "site_1", "nom": "Ch. 2", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
@@ -106,87 +106,65 @@ DB_CUISINE_MENU = [
 ]
 
 # ==============================================================================
-#                    OUTILS D'ISOLATION MULTI-TENANT (NOUVEAU)
+#                 OUTILS D'ISOLATION MULTI-TENANT & RESTRICTIONS
 # ==============================================================================
-
 def etablissements_autorises(user: dict) -> list:
-    """
-    Retourne la liste des etablissement_id que CET utilisateur a le droit de voir.
-    - super_admin_fondateur : ne doit jamais appeler cette fonction sur une route client
-      (il est bloqué plus bas) ; retourne [] par sécurité si jamais c'est le cas.
-    - super_admin (client) : tous les établissements de SA PROPRE organisation.
-    - gérant de poste (toilettes, flats, comptoir, cuisinier, salle, locataires) :
-      uniquement SON établissement de rattachement.
-    """
     if not user:
         return []
-
     role = user.get("role")
-
     if role == "super_admin_fondateur":
         return []
-
     if role == "super_admin":
         org_id = user.get("organisation_id")
         if not org_id:
-            # Repli de sécurité : si on ne connaît pas son organisation, on ne lui
-            # donne accès qu'à son propre etablissement_id (jamais un accès global).
             etab_id = user.get("etablissement_id")
             return [etab_id] if etab_id else []
         return [e["id"] for e in DB_ETABLISSEMENTS if e.get("organisation_id") == org_id]
-
-    # Gérant de poste : uniquement son établissement.
     etab_id = user.get("etablissement_id")
     return [etab_id] if etab_id else []
 
-
 def filtrer(liste: list, user: dict) -> list:
-    """Filtre une liste d'enregistrements (dicts avec 'etablissement_id') selon le périmètre de l'utilisateur."""
     autorises = etablissements_autorises(user)
     return [x for x in liste if x.get("etablissement_id") in autorises]
 
-
 def dans_perimetre(objet: dict, user: dict) -> bool:
-    """Vérifie qu'un enregistrement précis appartient au périmètre autorisé de l'utilisateur."""
     return objet.get("etablissement_id") in etablissements_autorises(user)
 
-
 def refuser_si_fondateur(user: dict):
-    """
-    Le super_admin_fondateur ne doit JAMAIS accéder aux routes "client" (dashboard,
-    flats, comptoir, etc.) : il n'a pas d'établissement et ne doit pas se mêler aux
-    données d'une entreprise cliente. On le renvoie systématiquement vers son espace.
-    """
     if user and user.get("role") == "super_admin_fondateur":
         return RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
     return None
 
+# NOUVELLE FONCTION DE RESTRICTION POUR LES GÉRANTS DE POSTE
+def rediriger_si_gerant_poste(user: dict):
+    """
+    Empêche un gérant de poste d'accéder au Dashboard.
+    Il est immédiatement réorienté vers son espace dédié.
+    """
+    if user and user.get("role") in ROLES_GERANTS_POSTE:
+        target = ROLE_REDIRECT_MAP.get(user.get("role"), "/login")
+        return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
+    return None
 
 # --- FONCTION UTILISATEUR UNIFIÉE & SÉCURISÉE ---
 def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
-
     token_val = session_token
     if isinstance(session_token, dict):
         token_val = session_token.get("access_token") or session_token.get("session_token")
-
     token_str = str(token_val).strip()
 
-    # 1. Priorité Accès Développeur / Fondateur (0000)
     if token_str == "0000":
         return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
-    # 2. Décodage du jeton JWT
     payload = decode_access_token(token_str)
     if payload and "sub" in payload:
         user_id = str(payload.get("sub"))
         role = payload.get("role", "super_admin")
-
         if user_id == "0000" or role == "super_admin_fondateur":
             return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
-        # Recherche BDD Supabase par sélection ciblée (évite les erreurs de colonnes manquantes)
         if db:
             try:
                 db_user = db.query(
@@ -201,7 +179,6 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
                 ).first()
 
                 if db_user:
-                    # On retrouve l'organisation_id via l'établissement rattaché (table Etablissement).
                     organisation_id = None
                     if db_user.etablissement_id:
                         try:
@@ -223,21 +200,17 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
             except Exception as e:
                 print(f"Avertissement BDD get_current_user: {e}", flush=True)
 
-        # Recherche fallback comptes gérants locaux
         for g in DB_GERANTS:
             if str(g["id"]) == user_id or str(g["pin"]) == user_id:
                 return g
-
         return {"id": user_id, "nom_complet": "Super Admin", "role": role, "etablissement_id": None, "organisation_id": None}
 
-    # 3. Recherche directe par PIN brut si non JWT
     for g in DB_GERANTS:
         if str(g["pin"]) == token_str or str(g["id"]) == token_str:
             return g
-
     return None
 
-# --- AUTHENTIFICATION ---
+# --- AUTHENTIFICATION & DÉCONNEXION ---
 @app.get("/", response_class=HTMLResponse)
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
@@ -259,14 +232,14 @@ def login(
             status_code=400
         )
 
-    # 1. ACCÈS DÉVELOPPEUR / FONDATEUR (0000) -> Redirige directement vers la Plateforme SaaS
+    # 1. DÉVELOPPEUR / FONDATEUR (0000)
     if valeur_pin == "0000":
         token = create_access_token({"sub": "0000", "role": "super_admin_fondateur"})
         response = RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION DANS SUPABASE (Comptes Super Admin clients & gérants)
+    # 2. SUPABASE BDD
     if db:
         try:
             db_user = db.query(
@@ -280,23 +253,23 @@ def login(
 
             if db_user:
                 token = create_access_token({"sub": str(db_user.id), "role": db_user.role})
-                target_url = "/cuisine" if db_user.role == "cuisinier" else "/dashboard"
+                # Redirection vers le module du poste ou vers le dashboard pour le super_admin
+                target_url = ROLE_REDIRECT_MAP.get(db_user.role, "/dashboard")
                 response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
                 response.set_cookie(key="session_token", value=token, httponly=True)
                 return response
         except Exception as e:
             print(f"Erreur connexion BDD Supabase : {e}", flush=True)
 
-    # 3. VÉRIFICATION COMPTES LOCAUX (DB_GERANTS)
+    # 3. COMPTES LOCAUX
     for g in DB_GERANTS:
         if str(g.get("pin")) == valeur_pin and g.get("est_actif", True):
             token = create_access_token({"sub": str(g["id"]), "role": g["role"]})
-            target_url = "/cuisine" if g.get("role") == "cuisinier" else "/dashboard"
+            target_url = ROLE_REDIRECT_MAP.get(g.get("role"), "/dashboard")
             response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
             response.set_cookie(key="session_token", value=token, httponly=True)
             return response
 
-    # 4. PIN INCORRECT
     return templates.TemplateResponse(
         request=request,
         name="login.html",
@@ -304,16 +277,12 @@ def login(
         status_code=400
     )
 
-
-# --- DÉCONNEXION (NOUVEAU) ---
 @app.get("/logout")
 @app.post("/logout")
 def logout():
-    """Supprime le cookie de session et renvoie vers la page de connexion, sans jamais produire de 404."""
     response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(key="session_token")
     return response
-
 
 # --- ESPACE DÉVELOPPEUR / FONDATEUR SAAS ---
 @app.get("/admin/plateforme", response_class=HTMLResponse)
@@ -324,11 +293,8 @@ def page_plateforme_admin(
 ):
     token_str = session_token or request.cookies.get("session_token")
     user = get_current_user(token_str, db)
-
-    # Secours Développeur
     if not user and (token_str == "0000" or request.cookies.get("session_token") == "0000"):
         user = {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
-
     if not user or user.get("role") != "super_admin_fondateur":
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -345,7 +311,7 @@ def page_plateforme_admin(
         context={"user": user, "organisations": organisations}
     )
 
-# --- TABLEAU DE BORD SUPER ADMIN CLIENT ---
+# --- TABLEAU DE BORD (ACCÈS RÉSERVÉ AU SUPER ADMIN EXCLUSIVEMENT) ---
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 def dashboard(
@@ -355,13 +321,20 @@ def dashboard(
 ):
     token_str = session_token or request.cookies.get("session_token")
     user = get_current_user(token_str, db)
-
     if not user:
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-    redirection = refuser_si_fondateur(user)
-    if redirection:
-        return redirection
 
+    # Bloque le Fondateur
+    redirection_fondateur = refuser_si_fondateur(user)
+    if redirection_fondateur:
+        return redirection_fondateur
+
+    # BLOQUE TOUS LES GÉRANTS DE POSTE : Redirige directement vers leur propre module
+    redirection_gerant = rediriger_si_gerant_poste(user)
+    if redirection_gerant:
+        return redirection_gerant
+
+    # À ce stade, SEUL LE SUPER_ADMIN CLIENT ACCÈDE AU DASHBOARD
     mes_toilettes = filtrer(DB_TOILETTES, user)
     mes_flats = filtrer(DB_SEJOURS_FLATS, user)
     mes_comptoir = filtrer(DB_VENTES_COMPTOIR, user)
@@ -380,7 +353,6 @@ def dashboard(
     recette_cuisine = sum(v.get("montant", 0) for v in mes_cuisine)
     recette_salle = sum(r.get("montant", 0) for r in mes_salle)
     recette_locataires = sum(l.get("montant", 0) for l in mes_locataires)
-
     alertes_stock = [p for p in mes_produits if p.get("quantite_stock", 0) < 5]
 
     return templates.TemplateResponse(
@@ -435,8 +407,6 @@ def gerants_page(request: Request, nouveau_pin: Optional[str] = None, session_to
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    # Un super_admin ne voit QUE les gérants de ses propres établissements, et jamais
-    # le compte fondateur (qui n'a de toute façon pas d'etablissement_id).
     mes_gerants = [
         g for g in DB_GERANTS
         if g.get("role") != "super_admin_fondateur" and g.get("etablissement_id") in etablissements_autorises(user)
@@ -449,13 +419,9 @@ def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: f
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
-    # Sécurité : on force l'établissement choisi à appartenir au périmètre du super_admin
-    # connecté. Impossible de créer un gérant pour un établissement d'une autre entreprise.
     autorises = etablissements_autorises(user)
     if etablissement_id not in autorises:
         etablissement_id = autorises[0] if autorises else None
-
     pin_auto = generate_auto_pin()
     nom_site = next((s["nom"] for s in DB_ETABLISSEMENTS if s["id"] == etablissement_id), "Établissement inconnu")
     DB_GERANTS.append({
@@ -485,7 +451,7 @@ def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)
         if not (
             g["id"] == gerant_id
             and g["role"] != "super_admin"
-            and g.get("etablissement_id") in autorises  # on ne peut désactiver que SES gérants
+            and g.get("etablissement_id") in autorises
         )
     ]
     return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
@@ -497,10 +463,8 @@ def flats_page(request: Request, session_token: Optional[str] = Cookie(None), db
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     mes_chambres = filtrer(DB_CHAMBRES, user)
     mes_sejours = filtrer(DB_SEJOURS_FLATS, user)
-
     return templates.TemplateResponse(
         request=request,
         name="flats.html",
@@ -532,13 +496,10 @@ def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
     autorises = etablissements_autorises(user)
     mon_etablissement = autorises[0] if autorises else None
-
     nouvel_id = str(uuid.uuid4())
     tarif = prix_par_heure if prix_par_heure else TARIFS_SYSTEME["flat_heure"]
-
     DB_CHAMBRES.append({
         "id": nouvel_id,
         "etablissement_id": mon_etablissement,
@@ -559,7 +520,6 @@ def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), 
         if ch["id"] == chambre_id and dans_perimetre(ch, user):
             ch["nom"] = nouveau_nom.strip()
             break
-
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/occuper")
@@ -738,7 +698,6 @@ def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str 
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
-
     DB_CUISINE_MENU.append({
         "id": str(uuid.uuid4()),
         "etablissement_id": mon_etablissement,
@@ -828,7 +787,7 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), 
         total_attendu = sum(r["montant"] for r in filtrer(DB_SALLE_FETES, user))
     elif user["role"] == "gerant_locataires":
         total_attendu = sum(l["montant"] for l in filtrer(DB_LOCATAIRES, user))
-    else:  # super_admin : tout SON périmètre (ses établissements), jamais celui des autres entreprises
+    else:
         total_attendu = (
             sum(e["montant"] for e in filtrer(DB_TOILETTES, user))
             + sum(s["montant"] for s in filtrer(DB_SEJOURS_FLATS, user))
@@ -837,12 +796,10 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), 
             + sum(r["montant"] for r in filtrer(DB_SALLE_FETES, user))
             + sum(l["montant"] for l in filtrer(DB_LOCATAIRES, user))
         )
-
     if user["role"] == "super_admin":
         mes_clotures = filtrer(DB_CLOTURES, user)
     else:
         mes_clotures = [c for c in filtrer(DB_CLOTURES, user) if c["gerant"] == user["nom_complet"]]
-
     return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "clotures": mes_clotures, "message": None})
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
@@ -856,11 +813,9 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
 
     mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user)[0] if etablissements_autorises(user) else None)
     autorises = etablissements_autorises(user)
-
     global DB_TOILETTES, DB_SEJOURS_FLATS, DB_VENTES_COMPTOIR, DB_CUISINE_VENTES, DB_CUISINE_DEPENSES, DB_SALLE_FETES, DB_LOCATAIRES
 
     def retirer_de(liste):
-        """Retire uniquement les enregistrements du périmètre de l'utilisateur, en gardant ceux des autres établissements/entreprises intacts."""
         a_garder = [x for x in liste if x.get("etablissement_id") not in autorises]
         a_cloturer = [x for x in liste if x.get("etablissement_id") in autorises]
         liste.clear()
@@ -897,7 +852,7 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         clotures_items = retirer_de(DB_LOCATAIRES)
         total_attendu = sum(l["montant"] for l in clotures_items)
         detail_txt = f"Locataires: {total_attendu:,.0f} FC"
-    else:  # super_admin : clôture globale de SON périmètre uniquement
+    else:
         t_toil_items = retirer_de(DB_TOILETTES)
         t_flat_items = retirer_de(DB_SEJOURS_FLATS)
         t_comp_items = retirer_de(DB_VENTES_COMPTOIR)
@@ -910,7 +865,6 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
                 ch["statut"] = "libre"
                 ch["montant_recu"] = 0.0
                 ch["duree"] = 0
-
         t_toil = sum(e["montant"] for e in t_toil_items)
         t_flat = sum(s["montant"] for s in t_flat_items)
         t_comp = sum(v["montant"] for v in t_comp_items)
@@ -934,12 +888,10 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
         "ecart": ecart,
         "detail": detail_txt
     })
-
     if user["role"] == "super_admin":
         mes_clotures = filtrer(DB_CLOTURES, user)
     else:
         mes_clotures = [c for c in filtrer(DB_CLOTURES, user) if c["gerant"] == user["nom_complet"]]
-
     return templates.TemplateResponse(
         request=request,
         name="cloture.html",
@@ -965,7 +917,6 @@ def register_client(
 ):
     email_clean = email.strip().lower()
     code_otp = str(random.randint(100000, 999999))
-
     DB_OTP_TEMP[email_clean] = {
         "code": code_otp,
         "expire": datetime.utcnow() + timedelta(minutes=15),
@@ -978,7 +929,6 @@ def register_client(
         envoyer_code_otp_email(email_clean, code_otp, nom_entreprise.strip())
     except Exception as e:
         print(f"Erreur envoi OTP Email: {e}", flush=True)
-
     return RedirectResponse(url=f"/verify-otp?email={email_clean}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/verify-otp", response_class=HTMLResponse)
@@ -1020,16 +970,13 @@ def valider_otp(
 ):
     email_clean = email.strip().lower()
     template_name = "register.html"
-
     if email_clean not in DB_OTP_TEMP:
         return templates.TemplateResponse(
             request=request,
             name=template_name,
             context={"email": email_clean, "error": "Session expirée ou invalide. Veuillez réessayer."}
         )
-
     data = DB_OTP_TEMP[email_clean]
-
     if datetime.utcnow() > data["expire"]:
         del DB_OTP_TEMP[email_clean]
         return templates.TemplateResponse(
@@ -1037,7 +984,6 @@ def valider_otp(
             name=template_name,
             context={"email": email_clean, "error": "Le code OTP a expiré."}
         )
-
     if data["code"] != code.strip():
         return templates.TemplateResponse(
             request=request,
@@ -1052,10 +998,8 @@ def valider_otp(
     nom_proprio = data["nom_proprietaire"]
     nom_entreprise = data["nom_entreprise"]
 
-    # 1. TENTATIVE DE SAUVEGARDE EN BDD SUPABASE
     if db:
         try:
-            # Insertion Organisation
             nouvelle_org = models.Organisation(
                 id=new_org_id,
                 nom_entreprise=nom_entreprise,
@@ -1068,7 +1012,6 @@ def valider_otp(
             db.add(nouvelle_org)
             db.commit()
 
-            # Insertion Établissement
             etab_args = {"id": new_etab_id, "organisation_id": new_org_id, "est_actif": True}
             if hasattr(models.Etablissement, 'nom'):
                 etab_args['nom'] = nom_entreprise
@@ -1076,7 +1019,6 @@ def valider_otp(
             db.add(nouvel_etablissement)
             db.commit()
 
-            # Insertion SQL directe de l'Utilisateur (pour bypasser le bug de colonne 'salaire')
             from sqlalchemy import text
             sql_insert = text("""
                 INSERT INTO utilisateurs (id, nom_complet, role, role_label, pin, est_actif, etablissement_id)
@@ -1096,7 +1038,6 @@ def valider_otp(
             db.rollback()
             print(f"=== AVERTISSEMENT BDD (Fallback memoire active) : {e} ===", flush=True)
 
-    # 2. ENREGISTREMENT SYSTÉMATIQUE DANS DB_GERANTS ET DB_ETABLISSEMENTS (Accès immédiat garanti)
     DB_ETABLISSEMENTS.append({
         "id": new_etab_id,
         "organisation_id": new_org_id,
@@ -1115,10 +1056,7 @@ def valider_otp(
         "organisation_id": new_org_id,
         "etablissement_nom": nom_entreprise
     })
-
-    # Nettoyage OTP
     del DB_OTP_TEMP[email_clean]
-
     return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/admin/plateforme/toggle/{org_id}")
