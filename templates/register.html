@@ -2,48 +2,191 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inscription Établissement — Commercial SaaS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Emmanuel — Création de Compte SaaS</title>
   <style>
-    body { background: #121A21; color: #FFF; font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
-    .card { background: #1C2732; border: 1px solid #2A3847; padding: 25px; border-radius: 12px; width: 100%; max-width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
-    h2 { margin-top: 0; color: #00B4D8; text-align: center; }
-    p { color: #A0AEC0; font-size: 0.9em; text-align: center; margin-bottom: 20px; }
-    label { display: block; margin-top: 10px; font-weight: bold; font-size: 0.85em; color: #CBD5E0; }
-    input { width: 100%; padding: 12px; margin-top: 5px; margin-bottom: 12px; background: #121A21; border: 1px solid #2A3847; color: #FFF; border-radius: 8px; box-sizing: border-box; font-size: 1em; }
-    .btn { background: #0077B6; color: #FFF; border: 0; padding: 14px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 1em; }
-    .btn:hover { background: #0096C7; }
-    .footer-link { text-align: center; margin-top: 15px; font-size: 0.85em; }
-    .footer-link a { color: #00B4D8; text-decoration: none; }
+    :root {
+      --bg: #121A21;
+      --card-bg: #1C2732;
+      --primary: #0077B6;
+      --secondary: #1E9E63;
+      --danger: #D9392B;
+      --ink: #FFFFFF;
+      --muted: #8E9BAE;
+      --line: #2A3847;
+      --r: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--r);
+      padding: 24px;
+      width: 100%;
+      max-width: 440px;
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .title { font-size: 20px; font-weight: 900; text-align: center; color: #FFF; }
+    .subtitle { font-size: 12px; color: var(--muted); text-align: center; margin-top: -8px; }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+
+    input[type="text"], input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      background: #121A21;
+      color: #FFF;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .services-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .service-option {
+      background: #121A21;
+      border: 1px solid var(--line);
+      padding: 10px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .service-option input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+    }
+
+    .btn-submit {
+      background: var(--primary);
+      color: #FFF;
+      border: 0;
+      padding: 14px;
+      border-radius: 8px;
+      font-weight: 900;
+      font-size: 14px;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .alert-error {
+      background: #3B1212;
+      border: 1px solid var(--danger);
+      color: #FF8888;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
+
   <div class="card">
-    <h2>Créer votre Établissement</h2>
-    <p>Profitez de 14 jours d'essai gratuit. Sans engagement.</p>
+    <div class="title">Inscription SaaS Emmanuel</div>
+    <div class="subtitle">Créez votre espace et choisissez vos modules</div>
 
-    <form action="/register" method="POST">
-      <label>Nom de l'Établissement / Complexe</label>
-      <input type="text" name="nom_entreprise" required placeholder="ex: Bar Resto Le Champion">
+    {% if error %}
+      <div class="alert-error">{{ error }}</div>
+    {% endif %}
 
-      <label>Nom complet du Propriétaire</label>
-      <input type="text" name="nom_proprietaire" required placeholder="ex: Jean Kabamba">
+    <form action="/register" method="POST" style="display: flex; flex-direction: column; gap: 12px;">
+      
+      <div class="field">
+        <label>Nom de votre Entreprise / Établissement</label>
+        <input type="text" name="nom_entreprise" required placeholder="ex: Groupe Emmanuel">
+      </div>
 
-      <label>Adresse E-mail (Vérification gratuite)</label>
-      <input type="email" name="email" required placeholder="ex: contact@exemple.com">
+      <div class="field">
+        <label>Nom du Propriétaire / Administrateur</label>
+        <input type="text" name="nom_proprietaire" required placeholder="ex: Jean Kabamba">
+      </div>
 
-      <label>Numéro Téléphone (WhatsApp / Mobile Money)</label>
-      <input type="tel" name="telephone" required placeholder="ex: +243810000000">
+      <div class="field">
+        <label>Adresse E-mail</label>
+        <input type="email" name="email" required placeholder="ex: contact@entreprise.com">
+      </div>
 
-      <label>Code PIN Principal Administrateur (4 chiffres)</label>
-      <input type="password" name="pin" maxlength="4" required placeholder="****">
+      <div class="field">
+        <label>Numéro de Téléphone</label>
+        <input type="text" name="telephone" required placeholder="ex: 0970000000">
+      </div>
 
-      <button type="submit" class="btn">S'INSCRIRE ET RECEVOIR LE CODE</button>
+      <div class="field">
+        <label>Code PIN Propriétaire (4 chiffres)</label>
+        <input type="password" name="pin" maxlength="4" required placeholder="1234">
+      </div>
+
+      <!-- SÉLECTION DES SERVICES À LA CARTE -->
+      <div class="field">
+        <label style="color: #64B5F6;">Cochez les services actifs pour votre entreprise :</label>
+        <div class="services-grid">
+          <label class="service-option">
+            <input type="checkbox" name="services" value="toilettes" checked>
+            <span>🚻 Toilettes</span>
+          </label>
+
+          <label class="service-option">
+            <input type="checkbox" name="services" value="flats" checked>
+            <span>🏨 Flats</span>
+          </label>
+
+          <label class="service-option">
+            <input type="checkbox" name="services" value="comptoir" checked>
+            <span>🍹 Comptoir</span>
+          </label>
+
+          <label class="service-option">
+            <input type="checkbox" name="services" value="cuisine" checked>
+            <span>🍳 Cuisine</span>
+          </label>
+
+          <label class="service-option">
+            <input type="checkbox" name="services" value="salle">
+            <span>🎉 Salle Fête</span>
+          </label>
+
+          <label class="service-option">
+            <input type="checkbox" name="services" value="locataires">
+            <span>🔑 Locataires</span>
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit">S'INSCRIRE ET RECEVOIR LE CODE OTP</button>
+
     </form>
-
-    <div class="footer-link">
-      Vous avez déjà un compte ? <a href="/login">Se connecter</a>
-    </div>
   </div>
+
 </body>
 </html>
