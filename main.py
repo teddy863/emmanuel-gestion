@@ -160,9 +160,6 @@ def rediriger_si_gerant_poste(user: dict):
     return None
 
 def verifier_service_actif(user: dict, db: Optional[Session], module: str):
-    """
-    Vérifie si le module est coché dans le forfait du client.
-    """
     if user.get("role") == "super_admin_fondateur":
         return None
     if db:
@@ -170,8 +167,10 @@ def verifier_service_actif(user: dict, db: Optional[Session], module: str):
             services = crud.get_services_actifs(db, user.get("organisation_id"))
             if module not in services:
                 return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Avertissement lecture services_actifs (Repli securite) : {e}", flush=True)
+            db.rollback()  # Débloque la transaction SQL en cas d'erreur
+            return None
     return None
 
 # --- FONCTION UTILISATEUR UNIFIÉE & SÉCURISÉE ---
