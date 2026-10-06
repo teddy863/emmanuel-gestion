@@ -107,7 +107,7 @@
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
 
-    input[type="number"] {
+    input[type="number"], input[type="text"] {
       width: 100%;
       padding: 10px;
       background: #121A21;
@@ -135,6 +135,7 @@
     }
 
     .btn-action { background: var(--primary); border: 1px solid #1B78B3; }
+    .btn-excel { background: #1E9E63; border: 1px solid #32D785; }
     .btn-module { background: var(--card-bg); border: 1px solid var(--line); color: #E1E8F0; }
     .btn-cloture { background: var(--secondary); }
     .btn-danger { background: var(--danger); }
@@ -176,51 +177,77 @@
       <div class="hero-val">{{ "{:,.0f}".format(recette_jour|default(0)).replace(',', ' ') }} FC</div>
     </div>
 
-    <!-- Mini stats par module en cours -->
+    <!-- Mini stats par module activé pour cette entreprise -->
     <div class="grid-2">
+      {% if 'toilettes' in services %}
       <div class="mini-card">
         <div class="mc-title">Toilettes</div>
         <div class="mc-val">{{ "{:,.0f}".format(total_toilettes|default(0)).replace(',', ' ') }} FC</div>
       </div>
+      {% endif %}
+      {% if 'flats' in services %}
       <div class="mini-card">
         <div class="mc-title">Flats</div>
         <div class="mc-val">{{ "{:,.0f}".format(total_flats|default(0)).replace(',', ' ') }} FC</div>
       </div>
+      {% endif %}
+      {% if 'comptoir' in services %}
       <div class="mini-card">
         <div class="mc-title">Comptoir</div>
         <div class="mc-val">{{ "{:,.0f}".format(total_comptoir|default(0)).replace(',', ' ') }} FC</div>
       </div>
+      {% endif %}
+      {% if 'cuisine' in services %}
       <div class="mini-card">
         <div class="mc-title">Cuisine</div>
         <div class="mc-val">{{ "{:,.0f}".format(total_cuisine|default(0)).replace(',', ' ') }} FC</div>
       </div>
+      {% endif %}
+      {% if 'salle' in services %}
+      <div class="mini-card">
+        <div class="mc-title">Salle de Fêtes</div>
+        <div class="mc-val">{{ "{:,.0f}".format(total_salle|default(0)).replace(',', ' ') }} FC</div>
+      </div>
+      {% endif %}
+      {% if 'locataires' in services %}
+      <div class="mini-card">
+        <div class="mc-title">Locataires</div>
+        <div class="mc-val">{{ "{:,.0f}".format(total_locataires|default(0)).replace(',', ' ') }} FC</div>
+      </div>
+      {% endif %}
     </div>
 
-    
+    <!-- Dépenses globales -->
+    <div class="mini-card" style="background: #2A1414;">
+      <div class="mc-title" style="color: #FF8888;">Total dépenses (en cours)</div>
+      <div class="mc-val" style="color: #FF8888;">{{ "{:,.0f}".format(total_depenses_global|default(0)).replace(',', ' ') }} FC</div>
+    </div>
+
+    <!-- EXPORTATION DES RAPPORTS EXCEL (NOUVEAU) -->
+    <div class="section-title">EXPORTS & COMPTABILITÉ</div>
+    <a href="/admin/export-excel" class="btn btn-excel">📊 TÉLÉCHARGER LE RAPPORT COMPTABLE EXCEL</a>
 
     <!-- RAPPORTS ET ARCHIVES DES CLÔTURES DES GÉRANTS -->
-<div class="section-title">DOSSIER ET ARCHIVES DES CLÔTURES (RÉSEAU)</div>
-<div class="card-form" style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
-  
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    <span style="font-size: 13px; font-weight: bold; color: #FFF;">
-      📂 Dossier des rapports de caisse
-    </span>
-    <span style="background: #0077B6; color: #FFF; font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 20px;">
-      {{ clotures|length }} clôture(s)
-    </span>
-  </div>
+    <div class="section-title">DOSSIER ET ARCHIVES DES CLÔTURES (RÉSEAU)</div>
+    <div class="card-form" style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 13px; font-weight: bold; color: #FFF;">
+          📂 Dossier des rapports de caisse
+        </span>
+        <span style="background: #0077B6; color: #FFF; font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 20px;">
+          {{ clotures|length }} clôture(s)
+        </span>
+      </div>
 
-  <div style="font-size: 11px; color: var(--muted);">
-    Toutes les clôtures journalières validées par vos gérants sont archivées et sécurisées dans ce dossier.
-  </div>
+      <div style="font-size: 11px; color: var(--muted);">
+        Toutes les clôtures journalières validées par vos gérants sont archivées et sécurisées dans ce dossier.
+      </div>
 
-  <!-- Bouton pour ouvrir le dossier complet des clôtures -->
-  <a href="/cloture" style="display: block; text-align: center; background: #1C2732; color: #64B5F6; border: 1px solid #2A3847; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 800; text-decoration: none; text-transform: uppercase;">
-    🔍 Accéder au dossier des clôtures
-  </a>
+      <a href="/cloture" style="display: block; text-align: center; background: #1C2732; color: #64B5F6; border: 1px solid #2A3847; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 800; text-decoration: none; text-transform: uppercase;">
+        🔍 Accéder au dossier des clôtures
+      </a>
+    </div>
 
-</div>
     <!-- Suivi des dettes enregistrées -->
     {% if dettes %}
       <div class="section-title">DETTES ET CRÉDITS EN COURS</div>
@@ -228,16 +255,16 @@
         {% for d in dettes %}
           <div class="archive-item">
             <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 900;">
-              <span>👤 {{ d.client_nom }} ({{ d.client_telephone }})</span>
+              <span>👤 {{ d.client_nom }}{% if d.client_telephone %} ({{ d.client_telephone }}){% endif %}</span>
               <span style="color: {% if d.est_payee %}#32D785{% else %}#FF8888{% endif %};">{{ "{:,.0f}".format(d.montant).replace(',', ' ') }} FC</span>
             </div>
             <div style="font-size: 11px; color: var(--muted);">
-              Motif : {{ d.motif }} · Agent : <b>{{ d.gerant }}</b>
+              {% if d.motif %}Motif : {{ d.motif }} · {% endif %}Agent : <b>{{ d.gerant_nom if d.gerant_nom else d.gerant }}</b>{% if d.module %} · {{ d.module }}{% endif %}
             </div>
             {% if not d.est_payee %}
               <a href="/dettes/payer/{{ d.id }}" style="margin-top: 6px; font-size: 11px; color: #32D785; font-weight: 900; text-decoration: none;">✔ RÉSOUDRE / ENCAISSER LA DETTE</a>
             {% else %}
-              <div style="font-size: 10px; color: #32D785; font-weight: 800;">Payé le {{ d.date_paiement }}</div>
+              <div style="font-size: 10px; color: #32D785; font-weight: 800;">Payée{% if d.date_paiement %} le {{ d.date_paiement }}{% endif %}</div>
             {% endif %}
           </div>
         {% endfor %}
@@ -248,18 +275,18 @@
     <div class="section-title">ADMINISTRATION SYSTÈME</div>
     <div style="display: flex; flex-direction: column; gap: 10px;">
       <a href="/gerants" class="btn btn-action">👤 GÉRER LES GÉRANTS, SALAIRES & POSTES</a>
-      <a href="/etablissements" class="btn btn-module">🏢 ÉTABLISSEMENTS (BANDAL / TCHANGU)</a>
+      <a href="/etablissements" class="btn btn-module">🏢 ÉTABLISSEMENTS</a>
     </div>
 
-    <!-- Accès aux 6 Modules -->
+    <!-- Accès aux modules activés -->
     <div class="section-title">ACCÈS DIRECT AUX MODULES</div>
     <div class="grid-2">
-      <a href="/toilettes" class="btn btn-module">🚻 Toilettes</a>
-      <a href="/flats" class="btn btn-module">🏨 Flats</a>
-      <a href="/comptoir" class="btn btn-module">🍹 Comptoir</a>
-      <a href="/cuisine" class="btn btn-module">🍳 Cuisine</a>
-      <a href="/salle" class="btn btn-module">🎉 Salle Fête</a>
-      <a href="/locataires" class="btn btn-module">🔑 Locataires</a>
+      {% if 'toilettes' in services %}<a href="/toilettes" class="btn btn-module">🚻 Toilettes</a>{% endif %}
+      {% if 'flats' in services %}<a href="/flats" class="btn btn-module">🏨 Flats</a>{% endif %}
+      {% if 'comptoir' in services %}<a href="/comptoir" class="btn btn-module">🍹 Comptoir</a>{% endif %}
+      {% if 'cuisine' in services %}<a href="/cuisine" class="btn btn-module">🍳 Cuisine</a>{% endif %}
+      {% if 'salle' in services %}<a href="/salle" class="btn btn-module">🎉 Salle Fête</a>{% endif %}
+      {% if 'locataires' in services %}<a href="/locataires" class="btn btn-module">🔑 Locataires</a>{% endif %}
     </div>
 
     <!-- Pied de page -->

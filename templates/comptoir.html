@@ -166,7 +166,7 @@
           <a href="/comptoir/vendre_une/{{ p.id }}" class="btn-drink">
             <div>
               <div class="drink-name">{{ p.nom }}</div>
-              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente).replace(',', ' ') }} FC</div>
+              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente if p.prix_vente is defined else p.prix_vente_bouteille).replace(',', ' ') }} FC</div>
             </div>
             <div class="drink-stock">Stock : {{ p.quantite_stock }} bout.</div>
           </a>
@@ -174,7 +174,7 @@
           <div class="btn-drink out-of-stock" onclick="alert('STOCK ÉPUISÉ ! Remplissez le formulaire ci-dessous pour réapprovisionner {{ p.nom }}.');">
             <div>
               <div class="drink-name">{{ p.nom }}</div>
-              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente).replace(',', ' ') }} FC</div>
+              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente if p.prix_vente is defined else p.prix_vente_bouteille).replace(',', ' ') }} FC</div>
             </div>
             <div class="drink-stock empty">⚠️ STOCK ÉPUISÉ (0)</div>
           </div>
@@ -195,8 +195,8 @@
         {% for v in ventes %}
           <div class="sale-row">
             <div>
-              <span style="font-weight: 900;">🍹 {{ v.produit }}</span>
-              <span style="font-size: 11px; color: var(--muted);"> à {{ v.heure }}</span>
+              <span style="font-weight: 900;">🍹 {{ v.produit or v.description }}</span>
+              <span style="font-size: 11px; color: var(--muted);"> à {{ v.heure if v.heure is defined else v.date_vente.strftime('%H:%M:%S') }}</span>
             </div>
             <span style="font-weight: 900; color: #64B5F6;">+{{ "{:,.0f}".format(v.montant).replace(',', ' ') }} FC</span>
           </div>
@@ -240,6 +240,41 @@
       </div>
 
       <button type="submit" class="btn-submit">ENREGISTRER / RÉAPPROVISIONNER</button>
+    </form>
+
+    <!-- Dépenses et dettes (comptabilité) -->
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">3. Enregistrer une Dépense</div>
+    <form action="/depenses/ajouter" method="POST" class="card">
+      <div class="field">
+        <label>Description</label>
+        <input type="text" name="description" required placeholder="ex: Transport, emballages...">
+      </div>
+      <div class="field">
+        <label>Montant (FC)</label>
+        <input type="number" name="montant" required placeholder="ex: 5000">
+      </div>
+      <button type="submit" class="btn-submit" style="background: var(--danger);">ENREGISTRER LA DÉPENSE</button>
+    </form>
+
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">4. Enregistrer une Dette Client</div>
+    <form action="/dettes/ajouter" method="POST" class="card">
+      <div class="field">
+        <label>Nom du client</label>
+        <input type="text" name="client_nom" required placeholder="ex: Mama Nicole">
+      </div>
+      <div class="field">
+        <label>Téléphone</label>
+        <input type="text" name="client_telephone" placeholder="ex: 0970000000">
+      </div>
+      <div class="field">
+        <label>Montant dû (FC)</label>
+        <input type="number" name="montant" required placeholder="ex: 10000">
+      </div>
+      <div class="field">
+        <label>Motif (optionnel)</label>
+        <input type="text" name="motif" placeholder="ex: boissons non payées">
+      </div>
+      <button type="submit" class="btn-submit" style="background: #B8860B;">ENREGISTRER LA DETTE</button>
     </form>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
