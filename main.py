@@ -184,9 +184,11 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
 
     token_str = str(token_val).strip()
 
+    # 1. Accès Développeur / Fondateur (0000)
     if token_str == "0000":
         return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
+    # 2. Décodage du jeton JWT
     payload = decode_access_token(token_str)
     if payload and "sub" in payload:
         user_id = str(payload.get("sub"))
@@ -217,8 +219,9 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
                             ).first()
                             if etab:
                                 organisation_id = etab.organisation_id
-                        except Exception as e:
-                            print(f"Avertissement BDD lecture organisation_id: {e}", flush=True)
+                        except Exception as e_etab:
+                            db.rollback()  # Débloque la transaction SQL
+                            print(f"Avertissement BDD lecture organisation_id: {e_etab}", flush=True)
 
                     return {
                         "id": str(db_user.id),
@@ -228,6 +231,7 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
                         "organisation_id": organisation_id
                     }
             except Exception as e:
+                db.rollback()  # DÉBLOQUE LA TRANSACTION SQL ÉCHOUÉE
                 print(f"Avertissement BDD get_current_user: {e}", flush=True)
 
         for g in DB_GERANTS:
