@@ -116,71 +116,16 @@ def ajouter_plat_menu(db: Session, etablissement_id: str, nom: str, prix: float,
 
 
 # ==============================================================================
-#                      GESTION DES ADDITIONS PAR TABLE (NOUVEAU)
-# ==============================================================================
-
-def get_commandes_tables_ouvertes(db: Session, etablissements_autorises: list):
-    """Récupère les additions non encore réglées pour les tables."""
-    return db.query(models.CommandeTable).filter(
-        models.CommandeTable.etablissement_id.in_(etablissements_autorises),
-        models.CommandeTable.est_payee == False
-    ).all()
-
-def ajouter_article_table(db: Session, etablissement_id: str, numero_table: str, description: str, montant: float, gerant_nom: str):
-    """Ouvre une table ou ajoute des consommations sur une table existante."""
-    commande = db.query(models.CommandeTable).filter(
-        models.CommandeTable.etablissement_id == etablissement_id,
-        models.CommandeTable.numero_table == numero_table,
-        models.CommandeTable.est_payee == False
-    ).first()
-
-    if commande:
-        commande.articles_details += f" | {description}"
-        commande.total_montant += montant
-    else:
-        commande = models.CommandeTable(
-            etablissement_id=etablissement_id,
-            numero_table=numero_table,
-            articles_details=description,
-            total_montant=montant,
-            gerant_nom=gerant_nom
-        )
-        db.add(commande)
-
-    db.commit()
-    db.refresh(commande)
-    return commande
-
-def payer_commande_table(db: Session, commande_id: str, gerant_nom: str):
-    """Règle la note globale d'une table et transfère le montant dans la caisse."""
-    commande = db.query(models.CommandeTable).filter(models.CommandeTable.id == commande_id).first()
-    if commande:
-        commande.est_payee = True
-        commande.date_cloture = _dt.datetime.utcnow()
-        enregistrer_vente(
-            db, 
-            commande.etablissement_id, 
-            "cuisine", 
-            f"Table {commande.numero_table}: {commande.articles_details}", 
-            commande.total_montant, 
-            gerant_nom
-        )
-        db.commit()
-    return commande
-
-
-# ==============================================================================
-#                           VENTES
+#                           VENTES (toilettes, flats, comptoir, cuisine, salle, locataires)
 # ==============================================================================
 
 def enregistrer_vente(db: Session, etablissement_id: str, module: str, description: str,
-                       montant: float, gerant_nom: str, quantite: int = 1, cout_achat: float = 0.0):
+                       montant: float, gerant_nom: str, quantite: int = 1):
     nouvelle_vente = models.Vente(
         etablissement_id=etablissement_id,
         module=module,
         description=description,
         montant=montant,
-        cout_achat=cout_achat,
         gerant_nom=gerant_nom,
         quantite=quantite
     )
@@ -190,7 +135,7 @@ def enregistrer_vente(db: Session, etablissement_id: str, module: str, descripti
     return nouvelle_vente
 
 def get_ventes_non_cloturees(db: Session, etablissements_autorises: list, module: str = None):
-    """Ventes pas encore comptées dans une clôture (cloture_id est vide). C'est le 'total attendu' courant."""
+    """Ventes pas encore comptées dans une clôture (cloture_id est vide). C'est le "total attendu" courant."""
     q = db.query(models.Vente).filter(
         models.Vente.etablissement_id.in_(etablissements_autorises),
         models.Vente.cloture_id.is_(None)
@@ -201,17 +146,11 @@ def get_ventes_non_cloturees(db: Session, etablissements_autorises: list, module
 
 
 # ==============================================================================
-#                           DÉPENSES
+#                           DÉPENSES (cuisine)
 # ==============================================================================
 
 def enregistrer_depense(db: Session, etablissement_id: str, description: str, montant: float, gerant_nom: str, module: str = None):
-    depense = models.Depense(
-        etablissement_id=etablissement_id, 
-        description=description, 
-        montant=montant, 
-        gerant_nom=gerant_nom, 
-        module=module
-    )
+    depense = models.Depense(etablissement_id=etablissement_id, description=description, montant=montant, gerant_nom=gerant_nom, module=module)
     db.add(depense)
     db.commit()
     db.refresh(depense)
@@ -234,13 +173,8 @@ def get_depenses_non_cloturees(db: Session, etablissements_autorises: list, modu
 def enregistrer_dette(db: Session, etablissement_id: str, client_nom: str, client_telephone: str,
                        montant: float, motif: str, gerant_nom: str, module: str = None):
     dette = models.Dette(
-        etablissement_id=etablissement_id, 
-        client_nom=client_nom, 
-        client_telephone=client_telephone,
-        montant=montant, 
-        motif=motif, 
-        gerant_nom=gerant_nom, 
-        module=module
+        etablissement_id=etablissement_id, client_nom=client_nom, client_telephone=client_telephone,
+        montant=montant, motif=motif, gerant_nom=gerant_nom, module=module
     )
     db.add(dette)
     db.commit()
@@ -266,19 +200,73 @@ def payer_dette(db: Session, dette_id: str, etablissements_autorises: list):
 
 
 # ==============================================================================
-#                           SERVICES ACTIFS
+#                           SERVICES ACTIFS (modules à la carte)
 # ==============================================================================
 
 TOUS_LES_SERVICES = ["toilettes", "flats", "comptoir", "cuisine", "salle", "locataires"]
 
 def get_services_actifs(db: Session, organisation_id: str) -> list:
-    """Retourne la liste des modules activés pour cette organisation."""
+    """Retourne la liste des modules activés pour cette organisation. Si rien n'est défini
+    (compte créé avant cette fonctionnalité), tous les modules sont actifs par défaut."""
     if not organisation_id:
         return TOUS_LES_SERVICES
     org = db.query(models.Organisation).filter(models.Organisation.id == organisation_id).first()
     if not org or not org.services_actifs:
         return TOUS_LES_SERVICES
     return [s.strip() for s in org.services_actifs.split(",") if s.strip()]
+
+
+# ==============================================================================
+#                           COMMANDES DE TABLE (restaurant / cuisine)
+# ==============================================================================
+
+def get_commandes_ouvertes(db: Session, etablissements_autorises: list):
+    return db.query(models.CommandeTable).filter(
+        models.CommandeTable.etablissement_id.in_(etablissements_autorises),
+        models.CommandeTable.est_payee == False
+    ).order_by(models.CommandeTable.date_creation.asc()).all()
+
+def ajouter_articles_a_table(db: Session, etablissement_id: str, numero_table: str,
+                              description: str, montant: float, gerant_nom: str):
+    """Ouvre l'addition de cette table si elle n'existe pas encore (impayée), sinon y ajoute les articles."""
+    commande = db.query(models.CommandeTable).filter(
+        models.CommandeTable.etablissement_id == etablissement_id,
+        models.CommandeTable.numero_table == numero_table,
+        models.CommandeTable.est_payee == False
+    ).first()
+    if commande:
+        commande.articles_details += f" | {description}"
+        commande.total_montant += montant
+    else:
+        commande = models.CommandeTable(
+            etablissement_id=etablissement_id,
+            numero_table=numero_table,
+            articles_details=description,
+            total_montant=montant,
+            gerant_nom=gerant_nom
+        )
+        db.add(commande)
+    db.commit()
+    db.refresh(commande)
+    return commande
+
+def regler_commande_table(db: Session, commande_id: str, etablissements_autorises: list, gerant_nom: str):
+    """Marque l'addition payée et crée la vente correspondante (module cuisine), sans jamais supprimer l'addition."""
+    commande = db.query(models.CommandeTable).filter(
+        models.CommandeTable.id == commande_id,
+        models.CommandeTable.etablissement_id.in_(etablissements_autorises)
+    ).first()
+    if not commande or commande.est_payee:
+        return None, None
+    commande.est_payee = True
+    commande.date_reglement = _dt.datetime.utcnow()
+    db.commit()
+    vente = enregistrer_vente(
+        db, commande.etablissement_id, "cuisine",
+        f"Table {commande.numero_table} : {commande.articles_details}",
+        commande.total_montant, gerant_nom
+    )
+    return commande, vente
 
 
 # ==============================================================================
@@ -293,6 +281,11 @@ def get_clotures_by_etablissement(db: Session, etablissements_autorises: list):
 def creer_cloture_et_marquer(db: Session, etablissement_id: str, gerant_nom: str, role_label: str,
                               montant_compte: float, ventes_a_cloturer: list, depenses_a_cloturer: list,
                               heure_str: str):
+    """
+    Crée la clôture, calcule l'écart, puis MARQUE (ne supprime jamais) les ventes et dépenses
+    concernées avec l'id de cette clôture, pour qu'elles ne soient plus comptées la prochaine fois
+    tout en restant consultables dans l'historique.
+    """
     total_attendu = sum(v.montant for v in ventes_a_cloturer)
     ecart = montant_compte - total_attendu
 
@@ -350,6 +343,7 @@ def creer_gerant(db: Session, nom_complet: str, role: str, role_label: str, sala
     return gerant
 
 def desactiver_gerant(db: Session, gerant_id: str, etablissements_autorises: list):
+    """Désactive (jamais ne supprime) un gérant, uniquement s'il appartient au périmètre autorisé."""
     gerant = db.query(models.Utilisateur).filter(
         models.Utilisateur.id == gerant_id,
         models.Utilisateur.etablissement_id.in_(etablissements_autorises),
@@ -369,5 +363,12 @@ def get_etablissements_by_organisation(db: Session, organisation_id: str):
     return db.query(models.Etablissement).filter(models.Etablissement.organisation_id == organisation_id).all()
 
 def get_etablissement_ids_by_organisation(db: Session, organisation_id: str) -> list:
-    rows = db.query(models.Etablissement.id).filter(models.Etablissement.organisation_id == organisation_id).all()
-    return [r.id for r in rows]
+    try:
+        rows = db.query(models.Etablissement.id).filter(models.Etablissement.organisation_id == organisation_id).all()
+        return [r.id for r in rows]
+    except Exception as e:
+        # CRITIQUE : sans ce rollback, Postgres refuse ensuite TOUTE requête de cette
+        # même connexion avec "InFailedSqlTransaction" jusqu'à la fin de la requête HTTP.
+        db.rollback()
+        print(f"Avertissement BDD get_etablissement_ids_by_organisation : {e}", flush=True)
+        return []

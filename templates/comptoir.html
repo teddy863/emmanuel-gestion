@@ -16,133 +16,29 @@
       --line: #2A3847;
       --r: 12px;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     html, body {
-      width: 100vw;
-      min-height: 100vh;
-      background-color: var(--bg-dark);
-      color: var(--text);
+      width: 100vw; min-height: 100vh; background-color: var(--bg-dark); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      overflow-x: hidden;
-      overflow-y: auto;
+      overflow-x: hidden; overflow-y: auto;
     }
-
-    .topbar {
-      background: #0A1118;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .container {
-      width: 100%;
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border-radius: var(--r);
-      padding: 14px;
-      border: 1px solid var(--line);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .grid-boissons {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .btn-drink {
-      background: #121A21;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      text-decoration: none;
-      color: #fff;
-      min-height: 90px;
-    }
-
-    .btn-drink.out-of-stock {
-      background: #3B1212;
-      border: 1px solid var(--danger);
-    }
-
+    .topbar { background: #0A1118; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--card-bg); border-radius: var(--r); padding: 14px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+    .grid-boissons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn-drink { background: #121A21; border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; text-decoration: none; color: #fff; min-height: 90px; }
+    .btn-drink.out-of-stock { background: #3B1212; border: 1px solid var(--danger); }
     .drink-name { font-weight: 900; font-size: 14px; }
     .drink-price { font-weight: 900; color: #64B5F6; font-size: 13px; }
     .drink-stock { font-size: 11px; color: #32D785; font-weight: 800; }
     .drink-stock.empty { color: #FF8888; font-weight: 900; }
-
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
-
-    input {
-      width: 100%;
-      padding: 10px;
-      background: #121A21;
-      color: #FFF;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .btn-submit {
-      background: var(--primary);
-      color: #fff;
-      border: 0;
-      border-radius: 10px;
-      height: 48px;
-      font-weight: 900;
-      text-transform: uppercase;
-      cursor: pointer;
-      width: 100%;
-    }
-
-    .btn-cloture {
-      background: var(--secondary);
-      color: #fff;
-      border-radius: 10px;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-decoration: none;
-      font-weight: 900;
-      text-transform: uppercase;
-    }
-
-    .alert-danger {
-      background: #3B1212;
-      border: 1px solid var(--danger);
-      color: #FF8888;
-      padding: 12px;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 800;
-      text-align: center;
-    }
-
-    .sale-row {
-      background: #121A21;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-    }
+    input { width: 100%; padding: 10px; background: #121A21; color: #FFF; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+    .btn-submit { background: var(--primary); color: #fff; border: 0; border-radius: 10px; height: 48px; font-weight: 900; text-transform: uppercase; cursor: pointer; width: 100%; }
+    .btn-cloture { background: var(--secondary); color: #fff; border-radius: 10px; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 900; text-transform: uppercase; }
+    .alert-danger { background: #3B1212; border: 1px solid var(--danger); color: #FF8888; padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 800; text-align: center; }
+    .sale-row { background: #121A21; padding: 10px; border-radius: 8px; border: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -159,14 +55,14 @@
     {% endif %}
 
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Vendre une Bouteille</div>
-    
+
     <div class="grid-boissons">
       {% for p in produits %}
         {% if p.quantite_stock > 0 %}
           <a href="/comptoir/vendre_une/{{ p.id }}" class="btn-drink">
             <div>
               <div class="drink-name">{{ p.nom }}</div>
-              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente if p.prix_vente is defined else p.prix_vente_bouteille).replace(',', ' ') }} FC</div>
+              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente_bouteille).replace(',', ' ') }} FC</div>
             </div>
             <div class="drink-stock">Stock : {{ p.quantite_stock }} bout.</div>
           </a>
@@ -174,7 +70,7 @@
           <div class="btn-drink out-of-stock" onclick="alert('STOCK ÉPUISÉ ! Remplissez le formulaire ci-dessous pour réapprovisionner {{ p.nom }}.');">
             <div>
               <div class="drink-name">{{ p.nom }}</div>
-              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente if p.prix_vente is defined else p.prix_vente_bouteille).replace(',', ' ') }} FC</div>
+              <div class="drink-price">{{ "{:,.0f}".format(p.prix_vente_bouteille).replace(',', ' ') }} FC</div>
             </div>
             <div class="drink-stock empty">⚠️ STOCK ÉPUISÉ (0)</div>
           </div>
@@ -184,7 +80,7 @@
 
     <!-- Historique des ventes -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">Ventes effectuées en Caisse</div>
-    
+
     <div class="card">
       <div style="display: flex; justify-content: space-between; font-weight: 900; color: #32D785; font-size: 15px;">
         <span>TOTAL CAISSE :</span>
@@ -195,8 +91,8 @@
         {% for v in ventes %}
           <div class="sale-row">
             <div>
-              <span style="font-weight: 900;">🍹 {{ v.produit or v.description }}</span>
-              <span style="font-size: 11px; color: var(--muted);"> à {{ v.heure if v.heure is defined else v.date_vente.strftime('%H:%M:%S') }}</span>
+              <span style="font-weight: 900;">🍹 {{ v.description }}</span>
+              <span style="font-size: 11px; color: var(--muted);"> à {{ v.date_vente.strftime('%H:%M:%S') }}</span>
             </div>
             <span style="font-weight: 900; color: #64B5F6;">+{{ "{:,.0f}".format(v.montant).replace(',', ' ') }} FC</span>
           </div>
@@ -210,7 +106,7 @@
 
     <!-- Formulaire unique (Création de boisson + Réapprovisionnement) -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 8px;">2. Ajouter une Boisson ou du Stock (Casier/Carton)</div>
-    
+
     <form action="/comptoir/ajouter_stock" method="POST" class="card">
       <div class="field">
         <label>Nom de la boisson</label>

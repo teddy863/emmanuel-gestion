@@ -27,5 +27,11 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        # Filet de sécurité : si une erreur SQL remonte sans avoir été gérée plus bas,
+        # on annule la transaction avant de fermer, pour ne jamais laisser une connexion
+        # "coincée" en échec (InFailedSqlTransaction) dans le pool.
+        db.rollback()
+        raise
     finally:
         db.close()

@@ -16,8 +16,9 @@ class Organisation(Base):
     est_active = Column(Boolean, default=True)
     est_en_essai = Column(Boolean, default=True)
     date_creation = Column(DateTime, default=datetime.utcnow)
-    
-    # Choix des services à la carte lors de l'inscription (ex: "comptoir,cuisine,flats")
+    # NOUVEAU : liste des services choisis à l'inscription, séparés par des virgules.
+    # Valeurs possibles : toilettes,flats,comptoir,cuisine,salle,locataires
+    # Si vide/NULL (anciens comptes) -> tous les services sont actifs par défaut.
     services_actifs = Column(String, nullable=True)
 
     etablissements = relationship("Etablissement", back_populates="organisation")
@@ -37,7 +38,6 @@ class Etablissement(Base):
     produits = relationship("Produit", back_populates="etablissement")
     clotures = relationship("Cloture", back_populates="etablissement")
     plats_menu = relationship("PlatMenu", back_populates="etablissement")
-    commandes_tables = relationship("CommandeTable", back_populates="etablissement")
 
 
 class Utilisateur(Base):
@@ -84,7 +84,7 @@ class Produit(Base):
 
 
 class PlatMenu(Base):
-    """Menu de la cuisine / restaurant."""
+    """Le menu de la cuisine (NOUVEAU : avant en mémoire seulement, maintenant persisté)."""
     __tablename__ = "plats_menu"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -96,23 +96,6 @@ class PlatMenu(Base):
     etablissement = relationship("Etablissement", back_populates="plats_menu")
 
 
-class CommandeTable(Base):
-    """Facturation / Addition ouverte par table (Cuisine, Restaurant, Comptoir)."""
-    __tablename__ = "commandes_tables"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    numero_table = Column(String, nullable=False)
-    articles_details = Column(String, nullable=False)
-    total_montant = Column(Float, default=0.0)
-    est_payee = Column(Boolean, default=False)
-    gerant_nom = Column(String, nullable=False)
-    date_ouverture = Column(DateTime, default=datetime.utcnow)
-    date_cloture = Column(DateTime, nullable=True)
-
-    etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
-    etablissement = relationship("Etablissement", back_populates="commandes_tables")
-
-
 class Vente(Base):
     __tablename__ = "ventes"
 
@@ -121,13 +104,12 @@ class Vente(Base):
     description = Column(String, nullable=False)
     quantite = Column(Integer, default=1)
     montant = Column(Float, nullable=False)
-    
-    # Nouveau pour le calcul du Bénéfice Net
-    cout_achat = Column(Float, default=0.0)
-
     gerant_nom = Column(String, nullable=False)
     date_vente = Column(DateTime, default=datetime.utcnow)
     etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
+    # NOUVEAU : tant que c'est NULL, la vente n'a pas encore été clôturée (elle compte dans
+    # le "total attendu" du gérant). Une fois clôturée, on y met l'id de la clôture -
+    # la ligne reste pour toujours dans l'historique, elle n'est jamais supprimée.
     cloture_id = Column(String, ForeignKey("clotures.id"), nullable=True)
 
 
@@ -145,7 +127,7 @@ class Depense(Base):
 
 
 class Dette(Base):
-    """Crédit laissé par un client (Comptoir, Cuisine, Flats, etc.)."""
+    """Dette/crédit laissé par un client, quel que soit le module (comptoir, cuisine, flats...)."""
     __tablename__ = "dettes"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -159,6 +141,22 @@ class Dette(Base):
     date_creation = Column(DateTime, default=datetime.utcnow)
     date_paiement = Column(DateTime, nullable=True)
     etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
+
+
+class CommandeTable(Base):
+    """Addition ouverte pour une table du restaurant : on y ajoute des articles au fil de la
+    consommation du client, et on la règle (et donc la clôture) seulement à la fin."""
+    __tablename__ = "commandes_tables"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    numero_table = Column(String, nullable=False)
+    articles_details = Column(String, nullable=False)
+    total_montant = Column(Float, nullable=False, default=0.0)
+    est_payee = Column(Boolean, default=False)
+    gerant_nom = Column(String, nullable=False)
+    etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)
+    date_creation = Column(DateTime, default=datetime.utcnow)
+    date_reglement = Column(DateTime, nullable=True)
 
 
 class Cloture(Base):

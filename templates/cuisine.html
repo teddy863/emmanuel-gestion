@@ -191,26 +191,6 @@
       align-items: center;
       font-size: 13px;
     }
-
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85);
-      justify-content: center;
-      align-items: center;
-      z-index: 999;
-    }
-
-    .modal-content {
-      background: #1C2732;
-      padding: 20px;
-      border-radius: 12px;
-      max-width: 360px;
-      width: 90%;
-      text-align: center;
-      border: 1px solid var(--line);
-    }
   </style>
 </head>
 <body>
@@ -236,35 +216,14 @@
       </div>
     </div>
 
-    <!-- TABLES & ADDITIONS EN COURS -->
-    {% if commandes_tables %}
-      <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">Tables & Additions ouvertes</div>
-      <div class="card" style="border: 1px solid #0E5C8C;">
-        {% for c in commandes_tables %}
-          <div class="row-item" style="flex-direction: column; align-items: flex-start; gap: 6px;">
-            <div style="display: flex; justify-content: space-between; width: 100%; font-weight: 900;">
-              <span style="color: #64B5F6;">🍽️ TABLE N° {{ c.numero_table }}</span>
-              <span style="color: #32D785;">{{ "{:,.0f}".format(c.total_montant).replace(',', ' ') }} FC</span>
-            </div>
-            <div style="font-size: 11px; color: var(--muted);">{{ c.articles_details }}</div>
-            <div style="display: flex; gap: 8px; width: 100%; margin-top: 4px;">
-              <button onclick="imprimerFacture('{{ c.numero_table }}', '{{ c.articles_details }}', '{{ c.total_montant }}')" style="flex: 1; padding: 6px; background: #0E5C8C; color: #fff; border: 0; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer;">🧾 FACTURE & QR CODE</button>
-              <a href="/cuisine/table/regler/{{ c.id }}" style="flex: 1; text-align: center; padding: 6px; background: #1E9E63; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 800; font-size: 11px;">✔ RÉGLER L'ADDITION</a>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-
-    <!-- 1. Sélection tactile avec option Numéro de Table -->
+    <!-- 1. Sélection tactile multi-articles avec annulation possible -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">1. Toucher les cartes pour composer la commande client</div>
     
     <form action="/cuisine/vendre_combinaison" method="POST" id="formVente">
       <div class="field" style="margin-bottom: 10px;">
-        <label>N° de Table (Laissez vide pour Vente Directe / Emporter)</label>
-        <input type="text" name="numero_table" placeholder="ex: Table 1, Table VIP...">
+        <label>Numéro de table (laisser vide pour un encaissement direct)</label>
+        <input type="text" name="numero_table" placeholder="ex: Table 5">
       </div>
-
       <div class="grid-menu">
         {% for m in menu %}
           <div class="card-item" id="card_{{ m.id }}" onclick="toggleSelect('{{ m.id }}')">
@@ -288,12 +247,13 @@
 
       {% if menu %}
         <div style="margin-top: 10px;">
-          <button type="submit" class="btn-submit">ENREGISTRER SUR LA TABLE / ENCAISSER</button>
+          <button type="submit" class="btn-submit">ENREGISTRER LA VENTE COMBINÉE</button>
           <button type="button" class="btn-reset" onclick="resetAllSelection()">↺ EFFACER LA SÉLECTION (ANNULER)</button>
         </div>
       {% endif %}
     </form>
 
+    <!-- Script de gestion interactive avec annulation -->
     <script>
       function toggleSelect(id) {
         var inp = document.getElementById('q_' + id);
@@ -323,36 +283,24 @@
         inputs.forEach(function(inp) { inp.value = 0; });
         cards.forEach(function(c) { c.classList.remove('selected'); });
       }
-
-      function imprimerFacture(table, details, total) {
-        document.getElementById('f_table').innerText = table;
-        document.getElementById('f_details').innerText = details;
-        document.getElementById('f_total').innerText = parseInt(total).toLocaleString() + ' FC';
-        document.getElementById('f_qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=PAIEMENT_MOBILE_MONEY_TABLE_' + table + '_MONTANT_' + total;
-        document.getElementById('modalFacture').style.display = 'flex';
-      }
-
-      function fermerModal() {
-        document.getElementById('modalFacture').style.display = 'none';
-      }
     </script>
 
-    <!-- Modal d'impression Facture & QR Code -->
-    <div id="modalFacture" class="modal">
-      <div class="modal-content">
-        <h3 style="color: #64B5F6; margin-bottom: 6px;">FACTURE TABLE <span id="f_table"></span></h3>
-        <p style="font-size: 12px; color: var(--muted); margin-bottom: 10px;" id="f_details"></p>
-        <h2 style="color: #32D785; margin-bottom: 15px;" id="f_total"></h2>
-        
-        <p style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Scannez pour payer par Mobile Money</p>
-        <img id="f_qr" src="" style="margin: 10px 0; border-radius: 8px;">
-        
-        <div style="display: flex; gap: 8px; margin-top: 10px;">
-          <button onclick="window.print()" style="flex: 1; padding: 10px; background: #0E5C8C; color: #fff; border: 0; border-radius: 8px; font-weight: 800;">🖨️ IMPRIMER (BLUETOOTH)</button>
-          <button onclick="fermerModal()" style="padding: 10px; background: #D9392B; color: #fff; border: 0; border-radius: 8px; font-weight: 800;">FERMER</button>
+    <!-- Additions ouvertes par table -->
+    {% if commandes_tables %}
+    <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Tables en cours</div>
+    <div class="card">
+      {% for cmd in commandes_tables %}
+        <div class="row-item" style="flex-direction: column; align-items: stretch; gap: 6px;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="font-weight: 900;">🪑 Table {{ cmd.numero_table }}</span>
+            <span style="font-weight: 900; color: #64B5F6;">{{ "{:,.0f}".format(cmd.total_montant).replace(',', ' ') }} FC</span>
+          </div>
+          <div style="font-size: 11px; color: var(--muted);">{{ cmd.articles_details }}</div>
+          <a href="/cuisine/table/regler/{{ cmd.id }}" style="text-align: center; background: var(--secondary); color: #fff; padding: 8px; border-radius: 8px; text-decoration: none; font-weight: 900; font-size: 12px;">RÉGLER ET GÉNÉRER LA FACTURE</a>
         </div>
-      </div>
+      {% endfor %}
     </div>
+    {% endif %}
 
     <!-- Historique des ventes du jour -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Ventes effectuées aujourd'hui</div>
@@ -360,8 +308,8 @@
       {% for v in ventes %}
         <div class="row-item">
           <div>
-            <div style="font-weight: 900; color: #FFF;">🍳 {{ v.description or v.plat }}</div>
-            <div style="font-size: 11px; color: var(--muted);">à {{ v.heure if v.heure else v.date_vente.strftime('%H:%M:%S') }}</div>
+            <div style="font-weight: 900; color: #FFF;">🍳 {{ v.description }}</div>
+            <div style="font-size: 11px; color: var(--muted);">à {{ v.date_vente.strftime('%H:%M:%S') }}</div>
           </div>
           <span style="font-weight: 900; color: #32D785;">+{{ "{:,.0f}".format(v.montant).replace(',', ' ') }} FC</span>
         </div>

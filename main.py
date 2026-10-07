@@ -20,10 +20,8 @@ import crud
 from security import hash_pin, verify_pin, create_access_token, decode_access_token, generate_auto_pin
 from services.email_service import envoyer_code_otp_email
 
-# 1. Initialisation de l'application FastAPI
 app = FastAPI(title="Emmanuel - Application de Gestion SaaS")
 
-# 2. Création automatique des tables sur Supabase au démarrage
 try:
     Base.metadata.create_all(bind=engine)
 except Exception as e:
@@ -32,7 +30,6 @@ except Exception as e:
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Stockage temporaire des codes OTP d'inscription
 DB_OTP_TEMP = {}
 
 ROLES_LABELS = {
@@ -46,7 +43,6 @@ ROLES_LABELS = {
 
 ROLES_GERANTS_POSTE = set(ROLES_LABELS.keys())
 
-# Mapping des redirections automatiques par rôle
 ROLE_REDIRECT_MAP = {
     "gerant_toilettes": "/toilettes",
     "gerant_flats": "/flats",
@@ -56,62 +52,19 @@ ROLE_REDIRECT_MAP = {
     "gerant_locataires": "/locataires"
 }
 
-# --- DONNÉES EN MÉMOIRE ET FALLBACKS ---
-DB_ETABLISSEMENTS = [
-    {"id": "site_1", "organisation_id": "org_demo_emmanuel", "nom": "Emmanuel - Bandal", "est_actif": True},
-    {"id": "site_2", "organisation_id": "org_demo_emmanuel", "nom": "Emmanuel - Tchangu", "est_actif": True}
-]
-
-DB_GERANTS = [
-    {"id": "admin_1", "nom_complet": "Emmanuel K.", "role": "super_admin", "role_label": "Super Admin", "pin": "1234", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Tous les sites"},
-    {"id": "fondateur_1", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "role_label": "Super Admin Fondateur", "pin": "0000", "salaire": 0.0, "est_actif": True, "etablissement_id": None, "organisation_id": None, "etablissement_nom": "Tous les sites"},
-    {"id": "toilette_1", "nom_complet": "Jeanne M.", "role": "gerant_toilettes", "role_label": "Gérant Toilettes", "pin": "5678", "salaire": 150000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "flat_1", "nom_complet": "Patrick N.", "role": "gerant_flats", "role_label": "Gérant Flats", "pin": "9012", "salaire": 200000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "comptoir_1", "nom_complet": "Bibiche T.", "role": "gerant_comptoir", "role_label": "Gérant Comptoir", "pin": "1111", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "cuisine_1", "nom_complet": "Sœur Anne", "role": "cuisinier", "role_label": "Cuisinier / Restaurant", "pin": "2222", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "salle_1", "nom_complet": "Marc L.", "role": "gerant_salle", "role_label": "Gérant Salle de Fêtes", "pin": "3333", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
-    {"id": "locataire_1", "nom_complet": "Clarisse V.", "role": "gerant_locataires", "role_label": "Gérant Locataires", "pin": "4444", "salaire": 180000.0, "est_actif": True, "etablissement_id": "site_1", "organisation_id": "org_demo_emmanuel", "etablissement_nom": "Emmanuel - Bandal"},
-]
-
 TARIFS_SYSTEME = {
     "toilettes_petit": 500.0,
     "toilettes_grand": 1000.0,
     "flat_heure": 5000.0
 }
 
-DB_TOILETTES = []
-DB_SEJOURS_FLATS = []
-DB_VENTES_COMPTOIR = []
-DB_CUISINE_VENTES = []
-DB_CUISINE_DEPENSES = []
 DB_SALLE_FETES = []
 DB_LOCATAIRES = []
-DB_DETTES = []
-DB_CLOTURES = []
-DB_COMMANDES_TABLES = []  # Stockage secours pour additions ouvertes par table
 
-DB_CHAMBRES = [
-    {"id": "1", "etablissement_id": "site_1", "nom": "Ch. 1", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "2", "etablissement_id": "site_1", "nom": "Ch. 2", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "3", "etablissement_id": "site_1", "nom": "Ch. 3", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "4", "etablissement_id": "site_1", "nom": "Ch. 4", "statut": "hors_service", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "5", "etablissement_id": "site_1", "nom": "Ch. 5", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-    {"id": "6", "etablissement_id": "site_1", "nom": "Ch. 6", "statut": "libre", "prix_par_heure": 5000.0, "montant_recu": 0.0, "duree": 0},
-]
-
-DB_COMPTOIR = [
-    {"id": "1", "etablissement_id": "site_1", "nom": "Eau 1,5 L", "unites_par_casier": 12, "prix_achat_casier": 18000.0, "prix_vente": 2000.0, "quantite_stock": 24},
-    {"id": "2", "etablissement_id": "site_1", "nom": "Mützig 65cl", "unites_par_casier": 12, "prix_achat_casier": 30000.0, "prix_vente": 3500.0, "quantite_stock": 36},
-    {"id": "3", "etablissement_id": "site_1", "nom": "Coca 33cl", "unites_par_casier": 24, "prix_achat_casier": 36000.0, "prix_vente": 2000.0, "quantite_stock": 48},
-]
-
-DB_CUISINE_MENU = [
-    {"id": "1", "etablissement_id": "site_1", "nom": "Cuisse de poulet", "prix": 5000.0, "unite": "morceau"},
-    {"id": "2", "etablissement_id": "site_1", "nom": "Poisson grillé", "prix": 10000.0, "unite": "morceau"},
-    {"id": "3", "etablissement_id": "site_1", "nom": "Foufou", "prix": 500.0, "unite": "boule"},
-    {"id": "4", "etablissement_id": "site_1", "nom": "Makemba", "prix": 1000.0, "unite": "portion"},
-    {"id": "5", "etablissement_id": "site_1", "nom": "Pondu", "prix": 1000.0, "unite": "portion"}
-]
+MODULE_PAR_ROLE = {
+    "gerant_toilettes": "toilettes", "gerant_flats": "flats", "gerant_comptoir": "comptoir",
+    "cuisinier": "cuisine", "gerant_salle": "salle", "gerant_locataires": "locataires"
+}
 
 # ==============================================================================
 #                 OUTILS D'ISOLATION MULTI-TENANT & RESTRICTIONS
@@ -129,20 +82,10 @@ def etablissements_autorises(user: dict, db: Optional[Session] = None) -> list:
             etab_id = user.get("etablissement_id")
             return [etab_id] if etab_id else []
         if db:
-            try:
-                return crud.get_etablissement_ids_by_organisation(db, org_id)
-            except Exception:
-                pass
-        return [e["id"] for e in DB_ETABLISSEMENTS if e.get("organisation_id") == org_id]
+            return crud.get_etablissement_ids_by_organisation(db, org_id)
+        return []
     etab_id = user.get("etablissement_id")
     return [etab_id] if etab_id else []
-
-def filtrer(liste: list, user: dict, db: Optional[Session] = None) -> list:
-    autorises = etablissements_autorises(user, db)
-    return [x for x in liste if x.get("etablissement_id") in autorises]
-
-def dans_perimetre(objet: dict, user: dict, db: Optional[Session] = None) -> bool:
-    return objet.get("etablissement_id") in etablissements_autorises(user, db)
 
 def refuser_si_fondateur(user: dict):
     if user and user.get("role") == "super_admin_fondateur":
@@ -150,10 +93,6 @@ def refuser_si_fondateur(user: dict):
     return None
 
 def rediriger_si_gerant_poste(user: dict):
-    """
-    Empêche un gérant de poste d'accéder au Dashboard.
-    Il est immédiatement réorienté vers son espace dédié.
-    """
     if user and user.get("role") in ROLES_GERANTS_POSTE:
         target = ROLE_REDIRECT_MAP.get(user.get("role"), "/login")
         return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
@@ -169,11 +108,10 @@ def verifier_service_actif(user: dict, db: Optional[Session], module: str):
                 return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
         except Exception as e:
             print(f"Avertissement lecture services_actifs (Repli securite) : {e}", flush=True)
-            db.rollback()  # Débloque la transaction SQL en cas d'erreur
+            db.rollback()
             return None
     return None
 
-# --- FONCTION UTILISATEUR UNIFIÉE & SÉCURISÉE ---
 def get_current_user(session_token: Optional[str], db: Optional[Session] = None):
     if not session_token:
         return None
@@ -184,11 +122,9 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
 
     token_str = str(token_val).strip()
 
-    # 1. Accès Développeur / Fondateur (0000)
     if token_str == "0000":
         return {"id": "0000", "nom_complet": "Fondateur SaaS", "role": "super_admin_fondateur", "etablissement_id": None, "organisation_id": None}
 
-    # 2. Décodage du jeton JWT
     payload = decode_access_token(token_str)
     if payload and "sub" in payload:
         user_id = str(payload.get("sub"))
@@ -220,7 +156,7 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
                             if etab:
                                 organisation_id = etab.organisation_id
                         except Exception as e_etab:
-                            db.rollback()  # Débloque la transaction SQL
+                            db.rollback()
                             print(f"Avertissement BDD lecture organisation_id: {e_etab}", flush=True)
 
                     return {
@@ -231,22 +167,13 @@ def get_current_user(session_token: Optional[str], db: Optional[Session] = None)
                         "organisation_id": organisation_id
                     }
             except Exception as e:
-                db.rollback()  # DÉBLOQUE LA TRANSACTION SQL ÉCHOUÉE
+                db.rollback()
                 print(f"Avertissement BDD get_current_user: {e}", flush=True)
 
-        for g in DB_GERANTS:
-            if str(g["id"]) == user_id or str(g["pin"]) == user_id:
-                return g
-
-        return {"id": user_id, "nom_complet": "Super Admin", "role": role, "etablissement_id": None, "organisation_id": None}
-
-    for g in DB_GERANTS:
-        if str(g["pin"]) == token_str or str(g["id"]) == token_str:
-            return g
+        return None
 
     return None
 
-# --- AUTHENTIFICATION & DÉCONNEXION ---
 @app.get("/", response_class=HTMLResponse)
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
@@ -268,25 +195,15 @@ def login(
             status_code=400
         )
 
-    # 1. DÉVELOPPEUR / FONDATEUR (0000)
     if valeur_pin == "0000":
         token = create_access_token({"sub": "0000", "role": "super_admin_fondateur"})
         response = RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(key="session_token", value=token, httponly=True)
         return response
 
-    # 2. VÉRIFICATION DANS SUPABASE BDD
     if db:
         try:
-            db_user = db.query(
-                models.Utilisateur.id,
-                models.Utilisateur.nom_complet,
-                models.Utilisateur.role,
-                models.Utilisateur.pin
-            ).filter(
-                models.Utilisateur.pin == valeur_pin
-            ).first()
-
+            db_user = crud.get_utilisateur_par_pin(db, valeur_pin)
             if db_user:
                 token = create_access_token({"sub": str(db_user.id), "role": db_user.role})
                 target_url = ROLE_REDIRECT_MAP.get(db_user.role, "/dashboard")
@@ -294,16 +211,8 @@ def login(
                 response.set_cookie(key="session_token", value=token, httponly=True)
                 return response
         except Exception as e:
+            db.rollback()
             print(f"Erreur connexion BDD Supabase : {e}", flush=True)
-
-    # 3. COMPTES LOCAUX
-    for g in DB_GERANTS:
-        if str(g.get("pin")) == valeur_pin and g.get("est_actif", True):
-            token = create_access_token({"sub": str(g["id"]), "role": g["role"]})
-            target_url = ROLE_REDIRECT_MAP.get(g.get("role"), "/dashboard")
-            response = RedirectResponse(url=target_url, status_code=status.HTTP_303_SEE_OTHER)
-            response.set_cookie(key="session_token", value=token, httponly=True)
-            return response
 
     return templates.TemplateResponse(
         request=request,
@@ -319,7 +228,6 @@ def logout():
     response.delete_cookie(key="session_token")
     return response
 
-# --- ESPACE DÉVELOPPEUR / FONDATEUR SAAS ---
 @app.get("/admin/plateforme", response_class=HTMLResponse)
 def page_plateforme_admin(
     request: Request,
@@ -340,6 +248,7 @@ def page_plateforme_admin(
         try:
             organisations = db.query(models.Organisation).all()
         except Exception as e:
+            db.rollback()
             print(f"Erreur lecture organisations: {e}", flush=True)
 
     return templates.TemplateResponse(
@@ -348,7 +257,6 @@ def page_plateforme_admin(
         context={"user": user, "organisations": organisations}
     )
 
-# --- EXPORTATION DES RAPPORTS EXCEL (NOUVEAU) ---
 @app.get("/admin/export-excel")
 def exporter_rapport_excel(
     session_token: Optional[str] = Cookie(None),
@@ -359,52 +267,45 @@ def exporter_rapport_excel(
         raise HTTPException(status_code=403, detail="Accès réservé au Super Admin")
 
     autorises = etablissements_autorises(user, db)
-    
-    # Extraction BDD ou mémoire
-    ventes = crud.get_ventes_non_cloturees(db, autorises) if db else []
-    clotures = crud.get_clotures_by_etablissement(db, autorises) if db else filtrer(DB_CLOTURES, user)
-    dettes = crud.get_dettes(db, autorises) if db else filtrer(DB_DETTES, user)
+
+    ventes = crud.get_ventes_non_cloturees(db, autorises)
+    clotures = crud.get_clotures_by_etablissement(db, autorises)
+    dettes = crud.get_dettes(db, autorises)
+    depenses = crud.get_depenses_non_cloturees(db, autorises)
 
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
 
-    writer.writerow(["--- RAPPORT FINANCIER ET COMPTABLE EMMANUEL ---"])
+    writer.writerow(["--- RAPPORT FINANCIER ET COMPTABLE ---"])
     writer.writerow([])
-    writer.writerow(["--- VENTES EN CAISSE ---"])
+    writer.writerow(["--- VENTES EN CAISSE (non clôturées) ---"])
     writer.writerow(["Date", "Module", "Description", "Montant (FC)", "Gérant"])
     for v in ventes:
         writer.writerow([v.date_vente.strftime("%d/%m/%Y %H:%M"), v.module, v.description, v.montant, v.gerant_nom])
 
     writer.writerow([])
+    writer.writerow(["--- DÉPENSES (non clôturées) ---"])
+    writer.writerow(["Date", "Module", "Description", "Montant (FC)", "Gérant"])
+    for d in depenses:
+        writer.writerow([d.date_depense.strftime("%d/%m/%Y %H:%M"), d.module or "-", d.description, d.montant, d.gerant_nom])
+
+    writer.writerow([])
     writer.writerow(["--- HISTORIQUE DES CLÔTURES ---"])
     writer.writerow(["Date", "Heure", "Gérant", "Rôle", "Attendu (FC)", "Compté (FC)", "Écart (FC)"])
     for c in clotures:
-        date_str = c.date_cloture.strftime("%d/%m/%Y") if hasattr(c, 'date_cloture') else c.get("date")
-        heure_str = c.heure_cloture if hasattr(c, 'heure_cloture') else c.get("heure")
-        gerant_str = c.gerant_nom if hasattr(c, 'gerant_nom') else c.get("gerant")
-        role_str = c.role_label if hasattr(c, 'role_label') else c.get("role_label")
-        attendu_str = c.montant_attendu if hasattr(c, 'montant_attendu') else c.get("montant_attendu")
-        compte_str = c.montant_compte if hasattr(c, 'montant_compte') else c.get("montant_compte")
-        ecart_str = c.ecart if hasattr(c, 'ecart') else c.get("ecart")
-        writer.writerow([date_str, heure_str, gerant_str, role_str, attendu_str, compte_str, ecart_str])
+        writer.writerow([c.date_cloture.strftime("%d/%m/%Y"), c.heure_cloture, c.gerant_nom, c.role_label, c.montant_attendu, c.montant_compte, c.ecart])
 
     writer.writerow([])
     writer.writerow(["--- DETTES ET CRÉDITS CLIENTS ---"])
     writer.writerow(["Client", "Téléphone", "Montant (FC)", "Motif", "Statut"])
     for d in dettes:
-        nom_c = d.client_nom if hasattr(d, 'client_nom') else d.get("client_nom")
-        tel_c = d.client_telephone if hasattr(d, 'client_telephone') else d.get("client_telephone", "-")
-        mnt_c = d.montant if hasattr(d, 'montant') else d.get("montant")
-        mtf_c = d.motif if hasattr(d, 'motif') else d.get("motif", "-")
-        paye_bool = d.est_payee if hasattr(d, 'est_payee') else d.get("est_payee")
-        statut = "PAYÉE" if paye_bool else "EN ATTENTE"
-        writer.writerow([nom_c, tel_c, mnt_c, mtf_c, statut])
+        statut = "PAYÉE" if d.est_payee else "EN ATTENTE"
+        writer.writerow([d.client_nom, d.client_telephone or "-", d.montant, d.motif or "-", statut])
 
     output.seek(0)
-    headers = {'Content-Disposition': 'attachment; filename="Rapport_Comptable_SaaS.csv"'}
+    headers = {'Content-Disposition': 'attachment; filename="Rapport_Comptable.csv"'}
     return StreamingResponse(iter([output.getvalue()]), media_type="text/csv", headers=headers)
 
-# --- TABLEAU DE BORD (SUPER ADMIN EXCLUSIVEMENT) ---
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 def dashboard(
@@ -427,28 +328,30 @@ def dashboard(
 
     autorises = etablissements_autorises(user, db)
 
-    mes_toilettes = filtrer(DB_TOILETTES, user, db)
-    mes_flats = filtrer(DB_SEJOURS_FLATS, user, db)
-    mes_comptoir = filtrer(DB_VENTES_COMPTOIR, user, db)
-    mes_cuisine = filtrer(DB_CUISINE_VENTES, user, db)
-    mes_salle = filtrer(DB_SALLE_FETES, user, db)
-    mes_locataires = filtrer(DB_LOCATAIRES, user, db)
-    mes_depenses_cuisine = filtrer(DB_CUISINE_DEPENSES, user, db)
-    mes_clotures = filtrer(DB_CLOTURES, user, db)
-    mes_dettes = filtrer(DB_DETTES, user, db)
-    mes_etablissements = [e for e in DB_ETABLISSEMENTS if e["id"] in autorises]
-    mes_produits = filtrer(DB_COMPTOIR, user, db)
+    ventes_toilettes = crud.get_ventes_non_cloturees(db, autorises, "toilettes")
+    ventes_flats = crud.get_ventes_non_cloturees(db, autorises, "flats")
+    ventes_comptoir = crud.get_ventes_non_cloturees(db, autorises, "comptoir")
+    ventes_cuisine = crud.get_ventes_non_cloturees(db, autorises, "cuisine")
+    ventes_salle = [v for v in DB_SALLE_FETES if v.get("etablissement_id") in autorises]
+    ventes_locataires = [v for v in DB_LOCATAIRES if v.get("etablissement_id") in autorises]
+    depenses = crud.get_depenses_non_cloturees(db, autorises)
+    dettes = crud.get_dettes(db, autorises)
+    clotures = crud.get_clotures_by_etablissement(db, autorises)
+    produits = []
+    for etab_id in autorises:
+        produits.extend(crud.get_produits_by_etablissement(db, etab_id))
 
-    services = crud.get_services_actifs(db, user.get("organisation_id")) if db else ["toilettes", "flats", "comptoir", "cuisine", "salle", "locataires"]
+    services = crud.get_services_actifs(db, user.get("organisation_id"))
 
-    recette_toilettes = sum(e.get("montant", 0) for e in mes_toilettes)
-    recette_flats = sum(s.get("montant", 0) for s in mes_flats)
-    recette_comptoir = sum(v.get("montant", 0) for v in mes_comptoir)
-    recette_cuisine = sum(v.get("montant", 0) for v in mes_cuisine)
-    recette_salle = sum(r.get("montant", 0) for r in mes_salle)
-    recette_locataires = sum(l.get("montant", 0) for l in mes_locataires)
+    recette_toilettes = sum(v.montant for v in ventes_toilettes)
+    recette_flats = sum(v.montant for v in ventes_flats)
+    recette_comptoir = sum(v.montant for v in ventes_comptoir)
+    recette_cuisine = sum(v.montant for v in ventes_cuisine)
+    recette_salle = sum(r.get("montant", 0) for r in ventes_salle)
+    recette_locataires = sum(l.get("montant", 0) for l in ventes_locataires)
 
-    alertes_stock = [p for p in mes_produits if p.get("quantite_stock", 0) < 5]
+    alertes_stock = [p for p in produits if p.quantite_stock < 5]
+    mes_etablissements = crud.get_etablissements_by_organisation(db, user.get("organisation_id")) if user.get("organisation_id") else []
 
     return templates.TemplateResponse(
         request=request,
@@ -463,10 +366,10 @@ def dashboard(
             "total_salle": recette_salle,
             "total_locataires": recette_locataires,
             "etablissements": mes_etablissements,
-            "clotures": mes_clotures,
-            "dettes": mes_dettes,
-            "depenses_cuisine": mes_depenses_cuisine,
-            "total_depenses_global": sum(d.get("montant", 0) for d in mes_depenses_cuisine),
+            "clotures": clotures,
+            "dettes": dettes,
+            "depenses_cuisine": [d for d in depenses if d.module == "cuisine"],
+            "total_depenses_global": sum(d.montant for d in depenses),
             "alertes_stock": alertes_stock,
             "services": services,
             "tarifs": TARIFS_SYSTEME
@@ -490,13 +393,12 @@ def ajuster_tarifs(
     TARIFS_SYSTEME["flat_heure"] = flat_heure
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- ÉTABLISSEMENTS & GÉRANTS ---
 @app.get("/etablissements", response_class=HTMLResponse)
 def page_etablissements(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_etablissements = [e for e in DB_ETABLISSEMENTS if e["id"] in etablissements_autorises(user, db)]
+    mes_etablissements = crud.get_etablissements_by_organisation(db, user.get("organisation_id")) if user.get("organisation_id") else []
     return templates.TemplateResponse(request=request, name="etablissements.html", context={"user": user, "etablissements": mes_etablissements})
 
 @app.get("/gerants", response_class=HTMLResponse)
@@ -504,11 +406,9 @@ def gerants_page(request: Request, nouveau_pin: Optional[str] = None, session_to
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_gerants = [
-        g for g in DB_GERANTS
-        if g.get("role") != "super_admin_fondateur" and g.get("etablissement_id") in etablissements_autorises(user, db)
-    ]
-    mes_etablissements = [e for e in DB_ETABLISSEMENTS if e["id"] in etablissements_autorises(user, db)]
+    autorises = etablissements_autorises(user, db)
+    mes_gerants = crud.get_gerants_by_etablissements(db, autorises)
+    mes_etablissements = crud.get_etablissements_by_organisation(db, user.get("organisation_id")) if user.get("organisation_id") else []
     return templates.TemplateResponse(request=request, name="gerants.html", context={"user": user, "gerants": mes_gerants, "etablissements": mes_etablissements, "roles_labels": ROLES_LABELS, "nouveau_pin": nouveau_pin})
 
 @app.post("/gerants/creer")
@@ -519,21 +419,10 @@ def creer_gerant(nom_complet: str = Form(...), role: str = Form(...), salaire: f
     autorises = etablissements_autorises(user, db)
     if etablissement_id not in autorises:
         etablissement_id = autorises[0] if autorises else None
-    pin_auto = generate_auto_pin()
-    nom_site = next((s["nom"] for s in DB_ETABLISSEMENTS if s["id"] == etablissement_id), "Établissement inconnu")
-    DB_GERANTS.append({
-        "id": str(uuid.uuid4()),
-        "nom_complet": nom_complet,
-        "role": role,
-        "role_label": ROLES_LABELS.get(role, role),
-        "pin": pin_auto,
-        "salaire": salaire,
-        "est_actif": True,
-        "etablissement_id": etablissement_id,
-        "organisation_id": user.get("organisation_id"),
-        "etablissement_nom": nom_site
-    })
-    return RedirectResponse(url=f"/gerants?nouveau_pin={pin_auto}", status_code=status.HTTP_303_SEE_OTHER)
+    if not etablissement_id:
+        return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
+    nouveau = crud.creer_gerant(db, nom_complet, role, ROLES_LABELS.get(role, role), salaire, etablissement_id)
+    return RedirectResponse(url=f"/gerants?nouveau_pin={nouveau.pin}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/gerants/supprimer/{gerant_id}")
 @app.post("/gerants/supprimer/{gerant_id}")
@@ -542,26 +431,23 @@ def supprimer_gerant(gerant_id: str, session_token: Optional[str] = Cookie(None)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     autorises = etablissements_autorises(user, db)
-    global DB_GERANTS
-    DB_GERANTS = [
-        g for g in DB_GERANTS
-        if not (
-            g["id"] == gerant_id
-            and g["role"] != "super_admin"
-            and g.get("etablissement_id") in autorises
-        )
-    ]
+    crud.desactiver_gerant(db, gerant_id, autorises)
     return RedirectResponse(url="/gerants", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- MODULE FLATS & CHAMBRES ---
 @app.get("/flats", response_class=HTMLResponse)
 @app.get("/flat", response_class=HTMLResponse)
 def flats_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_chambres = filtrer(DB_CHAMBRES, user, db)
-    mes_sejours = filtrer(DB_SEJOURS_FLATS, user, db)
+    redir = verifier_service_actif(user, db, "flats")
+    if redir:
+        return redir
+    autorises = etablissements_autorises(user, db)
+    mes_chambres = []
+    for etab_id in autorises:
+        mes_chambres.extend(crud.get_chambres_by_etablissement(db, etab_id))
+    mes_sejours = crud.get_ventes_non_cloturees(db, autorises, "flats")
     return templates.TemplateResponse(
         request=request,
         name="flats.html",
@@ -569,7 +455,7 @@ def flats_page(request: Request, session_token: Optional[str] = Cookie(None), db
             "user": user,
             "chambres": mes_chambres,
             "tarif_heure": TARIFS_SYSTEME["flat_heure"],
-            "total_flats": sum(s["montant"] for s in mes_sejours)
+            "total_flats": sum(v.montant for v in mes_sejours)
         }
     )
 
@@ -578,14 +464,10 @@ def changer_statut_chambre(chambre_id: str, nouveau_statut: str, session_token: 
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and dans_perimetre(ch, user, db):
-            if nouveau_statut in ["libre", "hors_service"]:
-                ch["statut"] = nouveau_statut
-                if nouveau_statut == "hors_service":
-                    ch["montant_recu"] = 0.0
-                    ch["duree"] = 0
-            break
+    autorises = etablissements_autorises(user, db)
+    chambre = crud.get_chambre_by_id(db, chambre_id, autorises)
+    if chambre and nouveau_statut in ["libre", "hors_service"]:
+        crud.changer_statut_chambre(db, chambre, nouveau_statut)
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/chambre/creer")
@@ -595,17 +477,10 @@ def ajouter_chambre(nom: str = Form(...), prix_par_heure: Optional[float] = Form
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     autorises = etablissements_autorises(user, db)
     mon_etablissement = autorises[0] if autorises else None
-    nouvel_id = str(uuid.uuid4())
+    if not mon_etablissement:
+        return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
     tarif = prix_par_heure if prix_par_heure else TARIFS_SYSTEME["flat_heure"]
-    DB_CHAMBRES.append({
-        "id": nouvel_id,
-        "etablissement_id": mon_etablissement,
-        "nom": nom.strip(),
-        "statut": "libre",
-        "prix_par_heure": tarif,
-        "montant_recu": 0.0,
-        "duree": 0
-    })
+    crud.creer_chambre(db, mon_etablissement, nom.strip(), tarif)
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/chambre/modifier")
@@ -613,10 +488,10 @@ def modifier_chambre(chambre_id: str = Form(...), nouveau_nom: str = Form(...), 
     user = get_current_user(session_token, db)
     if not user or user["role"] != "super_admin":
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and dans_perimetre(ch, user, db):
-            ch["nom"] = nouveau_nom.strip()
-            break
+    autorises = etablissements_autorises(user, db)
+    chambre = crud.get_chambre_by_id(db, chambre_id, autorises)
+    if chambre:
+        crud.renommer_chambre(db, chambre, nouveau_nom.strip())
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/flats/occuper")
@@ -624,20 +499,11 @@ def occuper_chambre(chambre_id: str = Form(...), montant_percu: float = Form(...
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and ch["statut"] == "libre" and dans_perimetre(ch, user, db):
-            ch["statut"] = "occupee"
-            ch["montant_recu"] = montant_percu
-            ch["duree"] = duree
-            DB_SEJOURS_FLATS.insert(0, {
-                "etablissement_id": ch["etablissement_id"],
-                "chambre": ch["nom"],
-                "montant": montant_percu,
-                "duree": duree,
-                "gerant": user["nom_complet"],
-                "heure": datetime.now().strftime("%H:%M:%S")
-            })
-            break
+    autorises = etablissements_autorises(user, db)
+    chambre = crud.get_chambre_by_id(db, chambre_id, autorises)
+    if chambre and chambre.statut == "libre":
+        crud.occuper_chambre(db, chambre, montant_percu, duree)
+        crud.enregistrer_vente(db, chambre.etablissement_id, "flats", f"Chambre {chambre.nom}", montant_percu, user["nom_complet"])
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/flats/liberer/{chambre_id}")
@@ -645,22 +511,25 @@ def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_flats", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for ch in DB_CHAMBRES:
-        if ch["id"] == chambre_id and ch["statut"] == "occupee" and dans_perimetre(ch, user, db):
-            ch["statut"] = "libre"
-            ch["montant_recu"] = 0.0
-            ch["duree"] = 0
-            break
+    autorises = etablissements_autorises(user, db)
+    chambre = crud.get_chambre_by_id(db, chambre_id, autorises)
+    if chambre and chambre.statut == "occupee":
+        crud.liberer_chambre(db, chambre)
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- MODULE COMPTOIR ---
 @app.get("/comptoir", response_class=HTMLResponse)
 def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_produits = filtrer(DB_COMPTOIR, user, db)
-    mes_ventes = filtrer(DB_VENTES_COMPTOIR, user, db)
+    redir = verifier_service_actif(user, db, "comptoir")
+    if redir:
+        return redir
+    autorises = etablissements_autorises(user, db)
+    mes_produits = []
+    for etab_id in autorises:
+        mes_produits.extend(crud.get_produits_by_etablissement(db, etab_id))
+    mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "comptoir")
     return templates.TemplateResponse(
         request=request,
         name="comptoir.html",
@@ -668,7 +537,7 @@ def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None),
             "user": user,
             "produits": mes_produits,
             "ventes": mes_ventes,
-            "total_ventes": sum(v["montant"] for v in mes_ventes),
+            "total_ventes": sum(v.montant for v in mes_ventes),
             "erreur_stock": None
         }
     )
@@ -678,32 +547,27 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for p in DB_COMPTOIR:
-        if p["id"] == produit_id and dans_perimetre(p, user, db):
-            if p["quantite_stock"] <= 0:
-                mes_produits = filtrer(DB_COMPTOIR, user, db)
-                mes_ventes = filtrer(DB_VENTES_COMPTOIR, user, db)
-                return templates.TemplateResponse(
-                    request=request,
-                    name="comptoir.html",
-                    context={
-                        "user": user,
-                        "produits": mes_produits,
-                        "ventes": mes_ventes,
-                        "total_ventes": sum(v["montant"] for v in mes_ventes),
-                        "erreur_stock": f"Stock épuisé pour '{p['nom']}' ! Veuillez réapprovisionner."
-                    }
-                )
-            p["quantite_stock"] -= 1
-            DB_VENTES_COMPTOIR.insert(0, {
-                "etablissement_id": p["etablissement_id"],
-                "produit": p["nom"],
-                "quantite": 1,
-                "montant": p["prix_vente"],
-                "heure": datetime.now().strftime("%H:%M:%S"),
-                "gerant": user["nom_complet"]
-            })
-            break
+    autorises = etablissements_autorises(user, db)
+    produit = crud.get_produit_by_id(db, produit_id, autorises)
+    if produit:
+        if produit.quantite_stock <= 0:
+            mes_produits = []
+            for etab_id in autorises:
+                mes_produits.extend(crud.get_produits_by_etablissement(db, etab_id))
+            mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "comptoir")
+            return templates.TemplateResponse(
+                request=request,
+                name="comptoir.html",
+                context={
+                    "user": user,
+                    "produits": mes_produits,
+                    "ventes": mes_ventes,
+                    "total_ventes": sum(v.montant for v in mes_ventes),
+                    "erreur_stock": f"Stock épuisé pour '{produit.nom}' ! Veuillez réapprovisionner."
+                }
+            )
+        crud.decrementer_stock(db, produit, 1)
+        crud.enregistrer_vente(db, produit.etablissement_id, "comptoir", produit.nom, produit.prix_vente_bouteille, user["nom_complet"])
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/comptoir/ajouter_stock")
@@ -711,41 +575,29 @@ def ajouter_stock_casier(nom: str = Form(...), unites_par_casier: int = Form(...
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    nouvelles_bouteilles = unites_par_casier * nombre_casiers
-    trouve = False
-    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user, db)[0] if etablissements_autorises(user, db) else None)
-    for p in DB_COMPTOIR:
-        if p["nom"].strip().lower() == nom.strip().lower() and dans_perimetre(p, user, db):
-            p["quantite_stock"] += nouvelles_bouteilles
-            p["prix_achat_casier"] = prix_achat_casier
-            p["prix_vente"] = prix_vente_bouteille
-            trouve = True
-            break
-    if not trouve:
-        DB_COMPTOIR.append({
-            "id": str(uuid.uuid4()),
-            "etablissement_id": mon_etablissement,
-            "nom": nom.strip(),
-            "unites_par_casier": unites_par_casier,
-            "prix_achat_casier": prix_achat_casier,
-            "prix_vente": prix_vente_bouteille,
-            "quantite_stock": nouvelles_bouteilles
-        })
+    autorises = etablissements_autorises(user, db)
+    mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
+    if mon_etablissement:
+        crud.ajouter_ou_creer_stock(db, mon_etablissement, nom, unites_par_casier, nombre_casiers, prix_achat_casier, prix_vente_bouteille)
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- MODULE CUISINE & RESTAURANT (TABLES & ADDITIONS) ---
 @app.get("/cuisine", response_class=HTMLResponse)
 def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_menu = filtrer(DB_CUISINE_MENU, user, db)
-    mes_ventes = filtrer(DB_CUISINE_VENTES, user, db)
-    mes_depenses = filtrer(DB_CUISINE_DEPENSES, user, db)
-    commandes_ouvertes = filtrer(DB_COMMANDES_TABLES, user, db)
-
-    total_v = sum(v["montant"] for v in mes_ventes)
-    total_d = sum(d["montant"] for d in mes_depenses)
+    redir = verifier_service_actif(user, db, "cuisine")
+    if redir:
+        return redir
+    autorises = etablissements_autorises(user, db)
+    mes_menu = []
+    for etab_id in autorises:
+        mes_menu.extend(crud.get_menu_by_etablissement(db, etab_id))
+    mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "cuisine")
+    mes_depenses = crud.get_depenses_non_cloturees(db, autorises, "cuisine")
+    commandes_tables = crud.get_commandes_ouvertes(db, autorises)
+    total_v = sum(v.montant for v in mes_ventes)
+    total_d = sum(d.montant for d in mes_depenses)
     return templates.TemplateResponse(
         request=request,
         name="cuisine.html",
@@ -757,70 +609,47 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), 
             "total_ventes": total_v,
             "total_depenses": total_d,
             "benefice_net": total_v - total_d,
-            "commandes_tables": [c for c in commandes_ouvertes if not c.get("est_payee")]
+            "commandes_tables": commandes_tables
         }
     )
 
 @app.post("/cuisine/vendre_combinaison")
 async def vendre_combinaison(
-    request: Request, 
+    request: Request,
     numero_table: Optional[str] = Form(None),
-    session_token: Optional[str] = Cookie(None), 
+    session_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    autorises = etablissements_autorises(user, db)
+    mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
     form_data = await request.form()
-    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user, db)[0] if etablissements_autorises(user, db) else None)
+
+    mes_menu = []
+    for etab_id in autorises:
+        mes_menu.extend(crud.get_menu_by_etablissement(db, etab_id))
+
     details_plat = []
     total_plat = 0.0
-
-    for m in filtrer(DB_CUISINE_MENU, user, db):
-        qty_key = f"qty_{m['id']}"
+    for m in mes_menu:
+        qty_key = f"qty_{m.id}"
         if qty_key in form_data and form_data[qty_key]:
             try:
                 qty = int(form_data[qty_key])
                 if qty > 0:
-                    sous_total = qty * m["prix"]
-                    total_plat += sous_total
-                    details_plat.append(f"{qty} {m['unite']}(s) {m['nom']}")
+                    total_plat += qty * m.prix
+                    details_plat.append(f"{qty} {m.unite}(s) {m.nom}")
             except ValueError:
                 pass
 
-    if details_plat:
-        description_complet = " + ".join(details_plat)
-        
-        # SI UNE TABLE EST SPÉCIFIÉE : On ouvre ou alimente l'addition de la table
+    if details_plat and mon_etablissement:
+        description_complete = " + ".join(details_plat)
         if numero_table and numero_table.strip():
-            num_t = numero_table.strip()
-            trouve = False
-            for cmd in DB_COMMANDES_TABLES:
-                if cmd["numero_table"] == num_t and not cmd["est_payee"] and dans_perimetre(cmd, user, db):
-                    cmd["articles_details"] += f" | {description_complet}"
-                    cmd["total_montant"] += total_plat
-                    trouve = True
-                    break
-            if not trouve:
-                DB_COMMANDES_TABLES.append({
-                    "id": str(uuid.uuid4()),
-                    "etablissement_id": mon_etablissement,
-                    "numero_table": num_t,
-                    "articles_details": description_complet,
-                    "total_montant": total_plat,
-                    "est_payee": False,
-                    "gerant": user["nom_complet"],
-                    "heure": datetime.now().strftime("%H:%M:%S")
-                })
+            crud.ajouter_articles_a_table(db, mon_etablissement, numero_table.strip(), description_complete, total_plat, user["nom_complet"])
         else:
-            # ENCAISSEMENT DIRECT SANS TABLE
-            DB_CUISINE_VENTES.insert(0, {
-                "etablissement_id": mon_etablissement,
-                "plat": description_complet,
-                "montant": total_plat,
-                "heure": datetime.now().strftime("%H:%M:%S"),
-                "cuisinier": user["nom_complet"]
-            })
+            crud.enregistrer_vente(db, mon_etablissement, "cuisine", description_complete, total_plat, user["nom_complet"])
 
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -829,34 +658,88 @@ def regler_addition_table(commande_id: str, session_token: Optional[str] = Cooki
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    
-    for cmd in DB_COMMANDES_TABLES:
-        if cmd["id"] == commande_id and dans_perimetre(cmd, user, db):
-            cmd["est_payee"] = True
-            DB_CUISINE_VENTES.insert(0, {
-                "etablissement_id": cmd["etablissement_id"],
-                "plat": f"Table {cmd['numero_table']} : {cmd['articles_details']}",
-                "montant": cmd["total_montant"],
-                "heure": datetime.now().strftime("%H:%M:%S"),
-                "cuisinier": user["nom_complet"]
-            })
-            break
-            
-    return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
+    autorises = etablissements_autorises(user, db)
+    crud.regler_commande_table(db, commande_id, autorises, user["nom_complet"])
+    return RedirectResponse(url=f"/cuisine/table/facture/{commande_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+@app.get("/cuisine/table/facture/{commande_id}", response_class=HTMLResponse)
+def facture_table(commande_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    user = get_current_user(session_token, db)
+    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    autorises = etablissements_autorises(user, db)
+    commande = db.query(models.CommandeTable).filter(
+        models.CommandeTable.id == commande_id,
+        models.CommandeTable.etablissement_id.in_(autorises)
+    ).first()
+    if not commande:
+        return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
+
+    import os
+    numero_mobile_money = os.getenv("MOBILE_MONEY_NUMERO", "")
+    qr_data = f"Paiement;{numero_mobile_money};{commande.total_montant:.0f} FC"
+
+    qr_base64 = None
+    try:
+        import qrcode
+        import base64
+        buf = io.BytesIO()
+        qrcode.make(qr_data).save(buf, format="PNG")
+        qr_base64 = base64.b64encode(buf.getvalue()).decode()
+    except ImportError:
+        pass
+
+    return HTMLResponse(f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Facture Table {commande.numero_table}</title>
+        <style>
+            body {{ background:#121A21; color:#FFF; font-family: sans-serif; padding:20px; }}
+            .facture {{ background:#1C2732; border-radius:12px; padding:20px; max-width:380px; margin:0 auto; border:1px solid #2A3847; }}
+            .ligne {{ padding:6px 0; border-bottom:1px solid #2A3847; font-size:14px; }}
+            .total {{ font-size:20px; font-weight:900; color:#32D785; text-align:right; margin-top:10px; }}
+            img {{ display:block; margin:16px auto; background:#fff; padding:8px; border-radius:8px; }}
+            button {{ width:100%; padding:12px; margin-top:10px; border:0; border-radius:8px; font-weight:900; cursor:pointer; }}
+            .btn-print {{ background:#0E5C8C; color:#fff; }}
+            .btn-bt {{ background:#1E9E63; color:#fff; }}
+        </style>
+    </head>
+    <body>
+        <div class="facture">
+            <h2>Table {commande.numero_table}</h2>
+            <div class="ligne">{commande.articles_details}</div>
+            <div class="total">{commande.total_montant:,.0f} FC</div>
+            {f'<img src="data:image/png;base64,{qr_base64}" width="180">' if qr_base64 else '<p style="color:#FF8888;text-align:center;">QR code indisponible (pip install qrcode[pil])</p>'}
+            <p style="font-size:11px;color:#8E9BAE;text-align:center;">Scanner pour payer par Mobile Money : {numero_mobile_money or 'numéro non configuré (MOBILE_MONEY_NUMERO)'}</p>
+            <button class="btn-print" onclick="window.print()">IMPRIMER</button>
+            <button class="btn-bt" onclick="chercherImprimante()">RECHERCHER UNE IMPRIMANTE BLUETOOTH</button>
+        </div>
+        <script>
+        async function chercherImprimante() {{
+            try {{
+                const device = await navigator.bluetooth.requestDevice({{ acceptAllDevices: true }});
+                alert("Imprimante trouvée : " + device.name + "\\n(Connexion et impression ESC/POS à configurer selon le modèle exact.)");
+            }} catch (e) {{
+                alert("Recherche annulée ou Bluetooth indisponible sur cet appareil : " + e);
+            }}
+        }}
+        </script>
+    </body>
+    </html>
+    """)
 
 @app.post("/cuisine/menu/ajouter")
 def ajouter_plat_menu(nom: str = Form(...), prix: float = Form(...), unite: str = Form("morceau"), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user, db)[0] if etablissements_autorises(user, db) else None)
-    DB_CUISINE_MENU.append({
-        "id": str(uuid.uuid4()),
-        "etablissement_id": mon_etablissement,
-        "nom": nom.strip(),
-        "prix": prix,
-        "unite": unite.strip()
-    })
+    autorises = etablissements_autorises(user, db)
+    mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
+    if mon_etablissement:
+        crud.ajouter_plat_menu(db, mon_etablissement, nom, prix, unite)
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/cuisine/depense")
@@ -864,57 +747,35 @@ def enregistrer_depense_cuisine(description: str = Form(...), montant: float = F
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["cuisinier", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user, db)[0] if etablissements_autorises(user, db) else None)
-    DB_CUISINE_DEPENSES.insert(0, {
-        "etablissement_id": mon_etablissement,
-        "description": description.strip(),
-        "montant": montant,
-        "heure": datetime.now().strftime("%H:%M:%S"),
-        "cuisinier": user["nom_complet"]
-    })
+    autorises = etablissements_autorises(user, db)
+    mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
+    if mon_etablissement:
+        crud.enregistrer_depense(db, mon_etablissement, description.strip(), montant, user["nom_complet"], "cuisine")
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- DÉPENSES & DETTES GÉNÉRIQUES ---
 @app.post("/depenses/ajouter")
 def ajouter_depense_generique(description: str = Form(...), montant: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user:
+    if not user or user["role"] not in list(MODULE_PAR_ROLE.keys()) + ["super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     autorises = etablissements_autorises(user, db)
     mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
-    module = ROLE_REDIRECT_MAP.get(user.get("role"), "").replace("/", "")
+    module = MODULE_PAR_ROLE.get(user["role"])
     if mon_etablissement:
-        DB_CUISINE_DEPENSES.insert(0, {
-            "etablissement_id": mon_etablissement,
-            "description": description.strip(),
-            "montant": montant,
-            "heure": datetime.now().strftime("%H:%M:%S"),
-            "cuisinier": user["nom_complet"]
-        })
+        crud.enregistrer_depense(db, mon_etablissement, description.strip(), montant, user["nom_complet"], module)
     redirection_url = f"/{module}" if module else "/dashboard"
     return RedirectResponse(url=redirection_url, status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/dettes/ajouter")
 def ajouter_dette(client_nom: str = Form(...), client_telephone: Optional[str] = Form(None), montant: float = Form(...), motif: Optional[str] = Form(None), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
-    if not user:
+    if not user or user["role"] not in list(MODULE_PAR_ROLE.keys()) + ["super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     autorises = etablissements_autorises(user, db)
     mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
-    module = ROLE_REDIRECT_MAP.get(user.get("role"), "").replace("/", "")
+    module = MODULE_PAR_ROLE.get(user["role"])
     if mon_etablissement:
-        DB_DETTES.insert(0, {
-            "id": str(uuid.uuid4()),
-            "etablissement_id": mon_etablissement,
-            "client_nom": client_nom.strip(),
-            "client_telephone": (client_telephone or "").strip(),
-            "montant": montant,
-            "motif": (motif or "").strip(),
-            "gerant_nom": user["nom_complet"],
-            "module": module,
-            "est_payee": False,
-            "date": datetime.now().strftime("%d/%m/%Y")
-        })
+        crud.enregistrer_dette(db, mon_etablissement, client_nom.strip(), (client_telephone or "").strip(), montant, (motif or "").strip(), user["nom_complet"], module)
     redirection_url = f"/{module}" if module else "/dashboard"
     return RedirectResponse(url=redirection_url, status_code=status.HTTP_303_SEE_OTHER)
 
@@ -923,19 +784,20 @@ def marquer_dette_payee(dette_id: str, session_token: Optional[str] = Cookie(Non
     user = get_current_user(session_token, db)
     if not user:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    for d in DB_DETTES:
-        if d["id"] == dette_id and dans_perimetre(d, user, db):
-            d["est_payee"] = True
-            break
-    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    autorises = etablissements_autorises(user, db)
+    crud.payer_dette(db, dette_id, autorises)
+    return RedirectResponse(url="/dashboard" if user["role"] == "super_admin" else f"/{MODULE_PAR_ROLE.get(user['role'], 'dashboard')}", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- MODULE SALLE DE FÊTES & LOCATAIRES ---
 @app.get("/salle", response_class=HTMLResponse)
 def salle_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_salle", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_reservations = filtrer(DB_SALLE_FETES, user, db)
+    redir = verifier_service_actif(user, db, "salle")
+    if redir:
+        return redir
+    autorises = etablissements_autorises(user, db)
+    mes_reservations = [r for r in DB_SALLE_FETES if r.get("etablissement_id") in autorises]
     return templates.TemplateResponse(request=request, name="salle.html", context={"user": user, "reservations": mes_reservations, "total_salle": sum(r["montant"] for r in mes_reservations)})
 
 @app.get("/locataires", response_class=HTMLResponse)
@@ -943,36 +805,37 @@ def locataires_page(request: Request, session_token: Optional[str] = Cookie(None
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_locataires", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_locataires = filtrer(DB_LOCATAIRES, user, db)
+    redir = verifier_service_actif(user, db, "locataires")
+    if redir:
+        return redir
+    autorises = etablissements_autorises(user, db)
+    mes_locataires = [l for l in DB_LOCATAIRES if l.get("etablissement_id") in autorises]
     return templates.TemplateResponse(request=request, name="locataires.html", context={"user": user, "locataires": mes_locataires, "total_locataires": sum(l["montant"] for l in mes_locataires)})
 
-# --- MODULE TOILETTES ---
 @app.get("/toilettes", response_class=HTMLResponse)
 def toilettes_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mes_passages = filtrer(DB_TOILETTES, user, db)
-    return templates.TemplateResponse(request=request, name="toilettes.html", context={"user": user, "total_toilettes": sum(e["montant"] for e in mes_passages), "passages": mes_passages, "tarif_petit": TARIFS_SYSTEME["toilettes_petit"], "tarif_grand": TARIFS_SYSTEME["toilettes_grand"], "tarif_heure": TARIFS_SYSTEME["flat_heure"]})
+    redir = verifier_service_actif(user, db, "toilettes")
+    if redir:
+        return redir
+    autorises = etablissements_autorises(user, db)
+    mes_passages = crud.get_ventes_non_cloturees(db, autorises, "toilettes")
+    return templates.TemplateResponse(request=request, name="toilettes.html", context={"user": user, "total_toilettes": sum(e.montant for e in mes_passages), "passages": mes_passages, "tarif_petit": TARIFS_SYSTEME["toilettes_petit"], "tarif_grand": TARIFS_SYSTEME["toilettes_grand"], "tarif_heure": TARIFS_SYSTEME["flat_heure"]})
 
 @app.post("/toilettes/encaisser")
 def encaisser_toilette(montant: float = Form(...), session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_toilettes", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user, db)[0] if etablissements_autorises(user, db) else None)
-    type_besoin = "Petit besoin" if montant == TARIFS_SYSTEME["toilettes_petit"] else "Grand besoin"
-    DB_TOILETTES.insert(0, {
-        "id": str(uuid.uuid4()),
-        "etablissement_id": mon_etablissement,
-        "montant": montant,
-        "type_besoin": type_besoin,
-        "gerant": user["nom_complet"],
-        "heure": datetime.now().strftime("%H:%M:%S")
-    })
+    autorises = etablissements_autorises(user, db)
+    mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
+    if mon_etablissement:
+        type_besoin = "Petit besoin" if montant == TARIFS_SYSTEME["toilettes_petit"] else "Grand besoin"
+        crud.enregistrer_vente(db, mon_etablissement, "toilettes", type_besoin, montant, user["nom_complet"])
     return RedirectResponse(url="/toilettes", status_code=status.HTTP_303_SEE_OTHER)
 
-# --- CLÔTURE ISOLÉE PAR GÉRANT ET PAR ÉTABLISSEMENT ---
 @app.get("/cloture", response_class=HTMLResponse)
 def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
@@ -982,31 +845,20 @@ def cloture_page(request: Request, session_token: Optional[str] = Cookie(None), 
     if redirection:
         return redirection
 
-    if user["role"] == "gerant_toilettes":
-        total_attendu = sum(e["montant"] for e in filtrer(DB_TOILETTES, user, db))
-    elif user["role"] == "gerant_flats":
-        total_attendu = sum(s["montant"] for s in filtrer(DB_SEJOURS_FLATS, user, db))
-    elif user["role"] == "gerant_comptoir":
-        total_attendu = sum(v["montant"] for v in filtrer(DB_VENTES_COMPTOIR, user, db))
-    elif user["role"] == "cuisinier":
-        total_attendu = sum(v["montant"] for v in filtrer(DB_CUISINE_VENTES, user, db))
-    elif user["role"] == "gerant_salle":
-        total_attendu = sum(r["montant"] for r in filtrer(DB_SALLE_FETES, user, db))
-    elif user["role"] == "gerant_locataires":
-        total_attendu = sum(l["montant"] for l in filtrer(DB_LOCATAIRES, user, db))
+    autorises = etablissements_autorises(user, db)
+    module = MODULE_PAR_ROLE.get(user["role"])
+    if module:
+        ventes = crud.get_ventes_non_cloturees(db, autorises, module)
     else:
-        total_attendu = (
-            sum(e["montant"] for e in filtrer(DB_TOILETTES, user, db))
-            + sum(s["montant"] for s in filtrer(DB_SEJOURS_FLATS, user, db))
-            + sum(v["montant"] for v in filtrer(DB_VENTES_COMPTOIR, user, db))
-            + sum(v["montant"] for v in filtrer(DB_CUISINE_VENTES, user, db))
-            + sum(r["montant"] for r in filtrer(DB_SALLE_FETES, user, db))
-            + sum(l["montant"] for l in filtrer(DB_LOCATAIRES, user, db))
-        )
+        ventes = crud.get_ventes_non_cloturees(db, autorises)
+    total_attendu = sum(v.montant for v in ventes)
+
+    toutes_clotures = crud.get_clotures_by_etablissement(db, autorises)
     if user["role"] == "super_admin":
-        mes_clotures = filtrer(DB_CLOTURES, user, db)
+        mes_clotures = toutes_clotures
     else:
-        mes_clotures = [c for c in filtrer(DB_CLOTURES, user, db) if c["gerant"] == user["nom_complet"]]
+        mes_clotures = [c for c in toutes_clotures if c.gerant_nom == user["nom_complet"]]
+
     return templates.TemplateResponse(request=request, name="cloture.html", context={"user": user, "total_attendu": total_attendu, "clotures": mes_clotures, "message": None})
 
 @app.post("/cloture/valider", response_class=HTMLResponse)
@@ -1018,96 +870,37 @@ def valider_cloture(request: Request, montant_compte: float = Form(...), session
     if redirection:
         return redirection
 
-    mon_etablissement = user.get("etablissement_id") or (etablissements_autorises(user, db)[0] if etablissements_autorises(user, db) else None)
     autorises = etablissements_autorises(user, db)
-    global DB_TOILETTES, DB_SEJOURS_FLATS, DB_VENTES_COMPTOIR, DB_CUISINE_VENTES, DB_CUISINE_DEPENSES, DB_SALLE_FETES, DB_LOCATAIRES
+    mon_etablissement = user.get("etablissement_id") or (autorises[0] if autorises else None)
+    module = MODULE_PAR_ROLE.get(user["role"])
 
-    def retirer_de(liste):
-        a_garder = [x for x in liste if x.get("etablissement_id") not in autorises]
-        a_cloturer = [x for x in liste if x.get("etablissement_id") in autorises]
-        liste.clear()
-        liste.extend(a_garder)
-        return a_cloturer
+    ventes_a_cloturer = crud.get_ventes_non_cloturees(db, autorises, module)
+    depenses_a_cloturer = crud.get_depenses_non_cloturees(db, autorises, module) if module else crud.get_depenses_non_cloturees(db, autorises)
 
-    if user["role"] == "gerant_toilettes":
-        clotures_items = retirer_de(DB_TOILETTES)
-        total_attendu = sum(e["montant"] for e in clotures_items)
-        detail_txt = f"Toilettes: {total_attendu:,.0f} FC"
-    elif user["role"] == "gerant_flats":
-        clotures_items = retirer_de(DB_SEJOURS_FLATS)
-        total_attendu = sum(s["montant"] for s in clotures_items)
-        detail_txt = f"Flats: {total_attendu:,.0f} FC"
-        for ch in DB_CHAMBRES:
-            if ch["statut"] == "occupee" and dans_perimetre(ch, user, db):
-                ch["statut"] = "libre"
-                ch["montant_recu"] = 0.0
-                ch["duree"] = 0
-    elif user["role"] == "gerant_comptoir":
-        clotures_items = retirer_de(DB_VENTES_COMPTOIR)
-        total_attendu = sum(v["montant"] for v in clotures_items)
-        detail_txt = f"Comptoir: {total_attendu:,.0f} FC"
-    elif user["role"] == "cuisinier":
-        clotures_items = retirer_de(DB_CUISINE_VENTES)
-        retirer_de(DB_CUISINE_DEPENSES)
-        total_attendu = sum(v["montant"] for v in clotures_items)
-        detail_txt = f"Cuisine: {total_attendu:,.0f} FC"
-    elif user["role"] == "gerant_salle":
-        clotures_items = retirer_de(DB_SALLE_FETES)
-        total_attendu = sum(r["montant"] for r in clotures_items)
-        detail_txt = f"Salle de Fêtes: {total_attendu:,.0f} FC"
-    elif user["role"] == "gerant_locataires":
-        clotures_items = retirer_de(DB_LOCATAIRES)
-        total_attendu = sum(l["montant"] for l in clotures_items)
-        detail_txt = f"Locataires: {total_attendu:,.0f} FC"
-    else:
-        t_toil_items = retirer_de(DB_TOILETTES)
-        t_flat_items = retirer_de(DB_SEJOURS_FLATS)
-        t_comp_items = retirer_de(DB_VENTES_COMPTOIR)
-        t_cuis_items = retirer_de(DB_CUISINE_VENTES)
-        retirer_de(DB_CUISINE_DEPENSES)
-        t_sall_items = retirer_de(DB_SALLE_FETES)
-        t_loca_items = retirer_de(DB_LOCATAIRES)
-        for ch in DB_CHAMBRES:
-            if ch["statut"] == "occupee" and dans_perimetre(ch, user, db):
-                ch["statut"] = "libre"
-                ch["montant_recu"] = 0.0
-                ch["duree"] = 0
-        t_toil = sum(e["montant"] for e in t_toil_items)
-        t_flat = sum(s["montant"] for s in t_flat_items)
-        t_comp = sum(v["montant"] for v in t_comp_items)
-        t_cuis = sum(v["montant"] for v in t_cuis_items)
-        t_sall = sum(r["montant"] for r in t_sall_items)
-        t_loca = sum(l["montant"] for l in t_loca_items)
-        total_attendu = t_toil + t_flat + t_comp + t_cuis + t_sall + t_loca
-        detail_txt = f"Toilettes: {t_toil:,.0f} FC | Flats: {t_flat:,.0f} FC | Comptoir: {t_comp:,.0f} FC | Cuisine: {t_cuis:,.0f} FC | Salle: {t_sall:,.0f} FC | Locataires: {t_loca:,.0f} FC"
+    crud.creer_cloture_et_marquer(
+        db, mon_etablissement, user["nom_complet"], ROLES_LABELS.get(user["role"], user["role"]),
+        montant_compte, ventes_a_cloturer, depenses_a_cloturer,
+        datetime.now().strftime("%H:%M:%S")
+    )
 
-    ecart = montant_compte - total_attendu
-    maintenant = datetime.now()
-    DB_CLOTURES.insert(0, {
-        "id": str(uuid.uuid4()),
-        "etablissement_id": mon_etablissement,
-        "date": maintenant.strftime("%d/%m/%Y"),
-        "heure": maintenant.strftime("%H:%M:%S"),
-        "gerant": user["nom_complet"],
-        "role_label": ROLES_LABELS.get(user["role"], user["role"]),
-        "montant_attendu": total_attendu,
-        "montant_compte": montant_compte,
-        "ecart": ecart,
-        "detail": detail_txt
-    })
+    if user["role"] == "gerant_flats":
+        for etab_id in autorises:
+            for ch in crud.get_chambres_by_etablissement(db, etab_id):
+                if ch.statut == "occupee":
+                    crud.liberer_chambre(db, ch)
+
+    toutes_clotures = crud.get_clotures_by_etablissement(db, autorises)
     if user["role"] == "super_admin":
-        mes_clotures = filtrer(DB_CLOTURES, user, db)
+        mes_clotures = toutes_clotures
     else:
-        mes_clotures = [c for c in filtrer(DB_CLOTURES, user, db) if c["gerant"] == user["nom_complet"]]
+        mes_clotures = [c for c in toutes_clotures if c.gerant_nom == user["nom_complet"]]
+
     return templates.TemplateResponse(
         request=request,
         name="cloture.html",
         context={"user": user, "total_attendu": 0.0, "clotures": mes_clotures, "message": f"Service clôturé avec succès ! Recette ({montant_compte:,.0f} FC) envoyée aux archives de la direction."}
     )
 
-# ==============================================================================
-#                 ROUTES INSCRIPTION SAAS, OTP & ESPACE FONDATEUR
-# ==============================================================================
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
     return templates.TemplateResponse(request=request, name="register.html")
@@ -1125,7 +918,11 @@ def register_client(
 ):
     email_clean = email.strip().lower()
     code_otp = str(random.randint(100000, 999999))
-    
+
+    services_valides = [s for s in services if s in crud.TOUS_LES_SERVICES]
+    if not services_valides:
+        services_valides = crud.TOUS_LES_SERVICES
+
     DB_OTP_TEMP[email_clean] = {
         "code": code_otp,
         "expire": datetime.utcnow() + timedelta(minutes=15),
@@ -1133,7 +930,7 @@ def register_client(
         "nom_proprietaire": nom_proprietaire.strip(),
         "telephone": telephone.strip(),
         "pin": pin.strip(),
-        "services": services
+        "services": services_valides
     }
     try:
         envoyer_code_otp_email(email_clean, code_otp, nom_entreprise.strip())
@@ -1206,73 +1003,49 @@ def valider_otp(
             context={"email": email_clean, "error": "Code OTP incorrect."}
         )
 
-    new_user_id = str(uuid.uuid4())
     new_org_id = str(uuid.uuid4())
     new_etab_id = str(uuid.uuid4())
     pin_client = data["pin"]
     nom_proprio = data["nom_proprietaire"]
     nom_entreprise = data["nom_entreprise"]
-    services_choisis = ",".join(data.get("services", []))
+    services_choisis = ",".join(data.get("services", crud.TOUS_LES_SERVICES))
 
-    if db:
-        try:
-            nouvelle_org = models.Organisation(
-                id=new_org_id,
-                nom_entreprise=nom_entreprise,
-                nom_proprietaire=nom_proprio,
-                email=email_clean,
-                telephone=data["telephone"],
-                est_active=True,
-                est_en_essai=True,
-                services_actifs=services_choisis
-            )
-            db.add(nouvelle_org)
-            db.commit()
+    try:
+        nouvelle_org = models.Organisation(
+            id=new_org_id,
+            nom_entreprise=nom_entreprise,
+            nom_proprietaire=nom_proprio,
+            email=email_clean,
+            telephone=data["telephone"],
+            est_active=True,
+            est_en_essai=True,
+            services_actifs=services_choisis
+        )
+        db.add(nouvelle_org)
+        db.commit()
 
-            etab_args = {"id": new_etab_id, "organisation_id": new_org_id, "est_actif": True}
-            if hasattr(models.Etablissement, 'nom'):
-                etab_args['nom'] = nom_entreprise
-            nouvel_etablissement = models.Etablissement(**etab_args)
-            db.add(nouvel_etablissement)
-            db.commit()
+        nouvel_etablissement = models.Etablissement(id=new_etab_id, organisation_id=new_org_id, nom=nom_entreprise, est_actif=True)
+        db.add(nouvel_etablissement)
+        db.commit()
 
-            from sqlalchemy import text
-            sql_insert = text("""
-                INSERT INTO utilisateurs (id, nom_complet, role, role_label, pin, est_actif, etablissement_id)
-                VALUES (:id, :nom_complet, :role, :role_label, :pin, :est_actif, :etablissement_id)
-            """)
-            db.execute(sql_insert, {
-                "id": new_user_id,
-                "nom_complet": nom_proprio,
-                "role": "super_admin",
-                "role_label": "Propriétaire / Admin",
-                "pin": pin_client,
-                "est_actif": True,
-                "etablissement_id": new_etab_id
-            })
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            print(f"=== AVERTISSEMENT BDD (Fallback memoire active) : {e} ===", flush=True)
-
-    DB_ETABLISSEMENTS.append({
-        "id": new_etab_id,
-        "organisation_id": new_org_id,
-        "nom": nom_entreprise,
-        "est_actif": True
-    })
-    DB_GERANTS.append({
-        "id": new_user_id,
-        "nom_complet": nom_proprio,
-        "role": "super_admin",
-        "role_label": "Propriétaire / Admin",
-        "pin": pin_client,
-        "salaire": 0.0,
-        "est_actif": True,
-        "etablissement_id": new_etab_id,
-        "organisation_id": new_org_id,
-        "etablissement_nom": nom_entreprise
-    })
+        nouvel_utilisateur = models.Utilisateur(
+            nom_complet=nom_proprio,
+            role="super_admin",
+            role_label="Propriétaire / Admin",
+            pin=pin_client,
+            est_actif=True,
+            etablissement_id=new_etab_id
+        )
+        db.add(nouvel_utilisateur)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"=== ERREUR BDD lors de l'inscription : {e} ===", flush=True)
+        return templates.TemplateResponse(
+            request=request,
+            name=template_name,
+            context={"email": email_clean, "error": "Erreur technique lors de la création du compte. Réessaie dans un instant."}
+        )
 
     del DB_OTP_TEMP[email_clean]
     return RedirectResponse(url="/login?success=compte_cree", status_code=status.HTTP_303_SEE_OTHER)
@@ -1291,6 +1064,7 @@ def changer_statut_organisation(
         if org:
             org.est_active = not org.est_active
             db.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        db.rollback()
+        print(f"Erreur toggle organisation: {e}", flush=True)
     return RedirectResponse(url="/admin/plateforme", status_code=status.HTTP_303_SEE_OTHER)
