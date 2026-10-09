@@ -228,10 +228,17 @@
       {% endif %}
     </div>
 
-    <!-- Dépenses globales -->
-    <div class="mini-card" style="background: #2A1414;">
-      <div class="mc-title" style="color: #FF8888;">Total dépenses (en cours)</div>
-      <div class="mc-val" style="color: #FF8888;">{{ "{:,.0f}".format(total_depenses_global|default(0)).replace(',', ' ') }} FC</div>
+    <!-- Comptabilité : Chiffre d'affaires - Coût d'achat = Marge brute ; - Dépenses = Bénéfice net -->
+    <div class="section-title">COMPTABILITÉ (EN COURS)</div>
+    <div class="card-form" style="gap: 8px;">
+      <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800;"><span style="color:var(--muted);">Chiffre d'affaires</span><span style="color:#64B5F6;">{{ "{:,.0f}".format(recette_jour|default(0)).replace(',', ' ') }} FC</span></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800;"><span style="color:var(--muted);">− Coût d'achat</span><span style="color:#FFB74D;">{{ "{:,.0f}".format(cout_achat_total|default(0)).replace(',', ' ') }} FC</span></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; border-top:1px solid var(--line); padding-top:8px;"><span style="color:var(--muted);">= Marge brute</span><span>{{ "{:,.0f}".format(marge_brute|default(0)).replace(',', ' ') }} FC</span></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800;"><span style="color:var(--muted);">− Dépenses</span><span style="color:#FF8888;">{{ "{:,.0f}".format(total_depenses_global|default(0)).replace(',', ' ') }} FC</span></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--line); padding-top:10px;">
+        <span style="font-size:12px; font-weight:900; text-transform:uppercase; color:var(--muted);">Bénéfice net</span>
+        <span style="font-size:22px; font-weight:900; color:{% if benefice_net|default(0) >= 0 %}#32D785{% else %}#FF8888{% endif %};">{{ "{:,.0f}".format(benefice_net|default(0)).replace(',', ' ') }} FC</span>
+      </div>
     </div>
 
     <!-- Alertes de stock bas (comptoir) -->

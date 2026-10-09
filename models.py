@@ -111,6 +111,9 @@ class Vente(Base):
     # le "total attendu" du gérant). Une fois clôturée, on y met l'id de la clôture -
     # la ligne reste pour toujours dans l'historique, elle n'est jamais supprimée.
     cloture_id = Column(String, ForeignKey("clotures.id"), nullable=True)
+    # NOUVEAU : coût d'achat de ce qui a été vendu (ex. prix d'achat d'une bouteille), pour
+    # calculer le bénéfice réel : ventes - coût d'achat - dépenses.
+    cout_achat = Column(Float, default=0.0)
 
 
 class Depense(Base):
@@ -152,6 +155,10 @@ class CommandeTable(Base):
     numero_table = Column(String, nullable=False)
     articles_details = Column(String, nullable=False)
     total_montant = Column(Float, nullable=False, default=0.0)
+    # Part de l'addition qui vient des boissons du comptoir (le reste vient de la cuisine) et
+    # leur coût d'achat : sert à répartir correctement la recette entre les deux modules.
+    total_comptoir = Column(Float, default=0.0)
+    cout_comptoir = Column(Float, default=0.0)
     est_payee = Column(Boolean, default=False)
     gerant_nom = Column(String, nullable=False)
     etablissement_id = Column(String, ForeignKey("etablissements.id"), nullable=False)

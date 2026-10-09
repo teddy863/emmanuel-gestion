@@ -120,14 +120,15 @@ def ajouter_plat_menu(db: Session, etablissement_id: str, nom: str, prix: float,
 # ==============================================================================
 
 def enregistrer_vente(db: Session, etablissement_id: str, module: str, description: str,
-                       montant: float, gerant_nom: str, quantite: int = 1):
+                       montant: float, gerant_nom: str, quantite: int = 1, cout_achat: float = 0.0):
     nouvelle_vente = models.Vente(
         etablissement_id=etablissement_id,
         module=module,
         description=description,
         montant=montant,
         gerant_nom=gerant_nom,
-        quantite=quantite
+        quantite=quantite,
+        cout_achat=cout_achat
     )
     db.add(nouvelle_vente)
     db.commit()
@@ -226,9 +227,17 @@ def get_commandes_ouvertes(db: Session, etablissements_autorises: list):
         models.CommandeTable.est_payee == False
     ).order_by(models.CommandeTable.date_creation.asc()).all()
 
+def get_commande_par_id(db: Session, commande_id: str, etablissements_autorises: list):
+    return db.query(models.CommandeTable).filter(
+        models.CommandeTable.id == commande_id,
+        models.CommandeTable.etablissement_id.in_(etablissements_autorises)
+    ).first()
+
 def ajouter_articles_a_table(db: Session, etablissement_id: str, numero_table: str,
-                              description: str, montant: float, gerant_nom: str):
-    """Ouvre l'addition de cette table si elle n'existe pas encore (impayée), sinon y ajoute les articles."""
+                              description: str, montant: float, gerant_nom: str,
+                              montant_comptoir: float = 0.0, cout_comptoir: float = 0.0):
+    """Ouvre l'addition de cette table si elle n'existe pas encore (impayée), sinon y ajoute les articles.
+    montant_comptoir / cout_comptoir : part de ce montant qui vient des boissons du comptoir."""
     commande = db.query(models.CommandeTable).filter(
         models.CommandeTable.etablissement_id == etablissement_id,
         models.CommandeTable.numero_table == numero_table,
@@ -237,12 +246,16 @@ def ajouter_articles_a_table(db: Session, etablissement_id: str, numero_table: s
     if commande:
         commande.articles_details += f" | {description}"
         commande.total_montant += montant
+        commande.total_comptoir = (commande.total_comptoir or 0.0) + montant_comptoir
+        commande.cout_comptoir = (commande.cout_comptoir or 0.0) + cout_comptoir
     else:
         commande = models.CommandeTable(
             etablissement_id=etablissement_id,
             numero_table=numero_table,
             articles_details=description,
             total_montant=montant,
+            total_comptoir=montant_comptoir,
+            cout_comptoir=cout_comptoir,
             gerant_nom=gerant_nom
         )
         db.add(commande)
@@ -251,22 +264,24 @@ def ajouter_articles_a_table(db: Session, etablissement_id: str, numero_table: s
     return commande
 
 def regler_commande_table(db: Session, commande_id: str, etablissements_autorises: list, gerant_nom: str):
-    """Marque l'addition payée et crée la vente correspondante (module cuisine), sans jamais supprimer l'addition."""
-    commande = db.query(models.CommandeTable).filter(
-        models.CommandeTable.id == commande_id,
-        models.CommandeTable.etablissement_id.in_(etablissements_autorises)
-    ).first()
+    """Marque l'addition payée et crée les ventes correspondantes : une pour la cuisine, une pour le
+    comptoir (avec son coût d'achat), pour que chaque module garde sa vraie recette. Jamais de suppression."""
+    commande = get_commande_par_id(db, commande_id, etablissements_autorises)
     if not commande or commande.est_payee:
-        return None, None
+        return None
     commande.est_payee = True
     commande.date_reglement = _dt.datetime.utcnow()
     db.commit()
-    vente = enregistrer_vente(
-        db, commande.etablissement_id, "cuisine",
-        f"Table {commande.numero_table} : {commande.articles_details}",
-        commande.total_montant, gerant_nom
-    )
-    return commande, vente
+
+    part_comptoir = commande.total_comptoir or 0.0
+    part_cuisine = commande.total_montant - part_comptoir
+    libelle = f"Table {commande.numero_table} : {commande.articles_details}"
+    if part_cuisine > 0:
+        enregistrer_vente(db, commande.etablissement_id, "cuisine", libelle, part_cuisine, gerant_nom)
+    if part_comptoir > 0:
+        enregistrer_vente(db, commande.etablissement_id, "comptoir", libelle, part_comptoir, gerant_nom,
+                          cout_achat=commande.cout_comptoir or 0.0)
+    return commande
 
 
 # ==============================================================================
@@ -372,3 +387,23 @@ def get_etablissement_ids_by_organisation(db: Session, organisation_id: str) -> 
         db.rollback()
         print(f"Avertissement BDD get_etablissement_ids_by_organisation : {e}", flush=True)
         return []
+
+
+# ==============================================================================
+#                           COMPTABILITÉ : BÉNÉFICE NET
+# ==============================================================================
+
+def calculer_bilan(ventes: list, depenses: list) -> dict:
+    """Bilan à partir de listes d'objets Vente et Depense :
+    chiffre d'affaires, coût d'achat, marge brute, dépenses, bénéfice net."""
+    chiffre_affaires = sum(v.montant for v in ventes)
+    cout_achat = sum((v.cout_achat or 0.0) for v in ventes)
+    total_depenses = sum(d.montant for d in depenses)
+    marge_brute = chiffre_affaires - cout_achat
+    return {
+        "chiffre_affaires": chiffre_affaires,
+        "cout_achat": cout_achat,
+        "marge_brute": marge_brute,
+        "total_depenses": total_depenses,
+        "benefice_net": marge_brute - total_depenses,
+    }

@@ -181,6 +181,13 @@
       text-transform: uppercase;
     }
 
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center; padding:10px; }
+    .modal-overlay.open { display:flex; }
+    .modal-box { background:#1C2732; border:1px solid var(--line); border-radius:12px; width:100%; max-width:420px; height:92vh; display:flex; flex-direction:column; overflow:hidden; }
+    .modal-head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); font-weight:900; }
+    .modal-close { background:var(--danger); color:#fff; border:0; border-radius:8px; padding:6px 12px; font-weight:900; cursor:pointer; }
+    .modal-box iframe { flex:1; width:100%; border:0; background:#121A21; }
+    .btn-facture { display:block; text-align:center; background:var(--primary); color:#fff; padding:9px; border-radius:8px; text-decoration:none; font-weight:900; font-size:12px; cursor:pointer; border:0; width:100%; }
     .row-item {
       background: #121A21;
       padding: 10px;
@@ -198,16 +205,22 @@
   <header class="topbar">
     <div style="font-size: 18px; font-weight: 900;">Cuisine & Restaurant</div>
     <div style="font-size: 12px; color: var(--muted);">Cuisinier : {{ user.nom_complet }}</div>
+    {% if user.role == 'super_admin' %}
+      <a href="/dashboard" style="display:inline-block; margin-top:6px; color:#64B5F6; font-size:12px; font-weight:800; text-decoration:none;">← Retour au tableau de bord</a>
+    {% endif %}
   </header>
 
   <main class="container">
 
-    <!-- Bilan financier en temps réel -->
+    <!-- Bilan financier en temps réel : Ventes - Coût d'achat - Dépenses = Bénéfice net -->
     <div class="card" style="background: linear-gradient(145deg, #1C2732 0%, #0A1118 100%);">
       <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; color: var(--muted);">
-        <span>VENTES DU JOUR : <b style="color: #64B5F6;">{{ "{:,.0f}".format(total_ventes).replace(',', ' ') }} FC</b></span>
+        <span>VENTES : <b style="color: #64B5F6;">{{ "{:,.0f}".format(total_ventes).replace(',', ' ') }} FC</b></span>
         <span>DÉPENSES : <b style="color: #FF8888;">{{ "{:,.0f}".format(total_depenses).replace(',', ' ') }} FC</b></span>
       </div>
+      {% if cout_achat %}
+      <div style="font-size: 12px; font-weight: 800; color: var(--muted);">COÛT D'ACHAT : <b style="color:#FFB74D;">{{ "{:,.0f}".format(cout_achat).replace(',', ' ') }} FC</b></div>
+      {% endif %}
       <div style="border-top: 1px solid var(--line); padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
         <span style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted);">BÉNÉFICE NET :</span>
         <span style="font-size: 20px; font-weight: 900; color: {% if benefice_net >= 0 %}#32D785{% else %}#FF8888{% endif %};">
@@ -285,7 +298,7 @@
       }
     </script>
 
-    <!-- Additions ouvertes par table -->
+    <!-- Additions ouvertes par table (cuisine + boissons du comptoir) -->
     {% if commandes_tables %}
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Tables en cours</div>
     <div class="card">
@@ -296,11 +309,30 @@
             <span style="font-weight: 900; color: #64B5F6;">{{ "{:,.0f}".format(cmd.total_montant).replace(',', ' ') }} FC</span>
           </div>
           <div style="font-size: 11px; color: var(--muted);">{{ cmd.articles_details }}</div>
-          <a href="/cuisine/table/regler/{{ cmd.id }}" style="text-align: center; background: var(--secondary); color: #fff; padding: 8px; border-radius: 8px; text-decoration: none; font-weight: 900; font-size: 12px;">RÉGLER ET GÉNÉRER LA FACTURE</a>
+          <button type="button" class="btn-facture" onclick="ouvrirFacture('{{ cmd.id }}')">🧾 GÉNÉRER LA FACTURE / ADDITION</button>
         </div>
       {% endfor %}
     </div>
     {% endif %}
+
+    <!-- Fenêtre (modal) de la facture avec QR Mobile Money et impression -->
+    <div class="modal-overlay" id="modalFacture">
+      <div class="modal-box">
+        <div class="modal-head"><span>Facture</span><button class="modal-close" onclick="fermerFacture()">FERMER ✕</button></div>
+        <iframe id="frameFacture" allow="bluetooth"></iframe>
+      </div>
+    </div>
+    <script>
+      function ouvrirFacture(id) {
+        document.getElementById('frameFacture').src = '/cuisine/table/facture/' + id + '?embed=1';
+        document.getElementById('modalFacture').classList.add('open');
+      }
+      function fermerFacture() {
+        document.getElementById('modalFacture').classList.remove('open');
+        document.getElementById('frameFacture').src = 'about:blank';
+        window.location.reload();
+      }
+    </script>
 
     <!-- Historique des ventes du jour -->
     <div style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--muted); margin-top: 6px;">Ventes effectuées aujourd'hui</div>

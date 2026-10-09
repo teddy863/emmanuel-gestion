@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from database import engine, Base, get_db
 import models
@@ -26,6 +27,19 @@ try:
     Base.metadata.create_all(bind=engine)
 except Exception as e:
     print(f"Avertissement Connexion Supabase : {e}")
+
+@app.exception_handler(SQLAlchemyError)
+async def erreur_base_de_donnees(request: Request, exc: SQLAlchemyError):
+    """Au lieu d'un écran 500 brut, on affiche une page claire avec un retour sûr.
+    Le rollback de la session est déjà fait par get_db()."""
+    print(f"=== ERREUR BDD non gérée sur {request.url.path} : {exc} ===", flush=True)
+    return HTMLResponse(
+        """<html><body style="background:#121A21;color:#fff;font-family:sans-serif;text-align:center;padding:40px;">
+        <h2>Oups, un problème technique est survenu</h2>
+        <p style="color:#8E9BAE;">Vos données sont en sécurité. Réessayez dans un instant.</p>
+        <p><a href="/" style="color:#64B5F6;">Retour à l'accueil</a></p></body></html>""",
+        status_code=500
+    )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -353,6 +367,14 @@ def dashboard(
     alertes_stock = [p for p in produits if p.quantite_stock < 5]
     mes_etablissements = crud.get_etablissements_by_organisation(db, user.get("organisation_id")) if user.get("organisation_id") else []
 
+    # Comptabilité globale : chiffre d'affaires - coût d'achat = marge brute ; - dépenses = bénéfice net
+    ventes_db = ventes_toilettes + ventes_flats + ventes_comptoir + ventes_cuisine
+    chiffre_affaires = recette_toilettes + recette_flats + recette_comptoir + recette_cuisine + recette_salle + recette_locataires
+    cout_achat_total = sum((v.cout_achat or 0.0) for v in ventes_db)
+    total_depenses = sum(d.montant for d in depenses)
+    marge_brute = chiffre_affaires - cout_achat_total
+    benefice_net = marge_brute - total_depenses
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -369,7 +391,10 @@ def dashboard(
             "clotures": clotures,
             "dettes": dettes,
             "depenses_cuisine": [d for d in depenses if d.module == "cuisine"],
-            "total_depenses_global": sum(d.montant for d in depenses),
+            "total_depenses_global": total_depenses,
+            "cout_achat_total": cout_achat_total,
+            "marge_brute": marge_brute,
+            "benefice_net": benefice_net,
             "alertes_stock": alertes_stock,
             "services": services,
             "tarifs": TARIFS_SYSTEME
@@ -517,6 +542,26 @@ def liberer_chambre(chambre_id: str, session_token: Optional[str] = Cookie(None)
         crud.liberer_chambre(db, chambre)
     return RedirectResponse(url="/flats", status_code=status.HTTP_303_SEE_OTHER)
 
+def _contexte_comptoir(user, db, autorises, erreur_stock=None):
+    mes_produits = []
+    for etab_id in autorises:
+        mes_produits.extend(crud.get_produits_by_etablissement(db, etab_id))
+    mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "comptoir")
+    mes_depenses = crud.get_depenses_non_cloturees(db, autorises, "comptoir")
+    bilan = crud.calculer_bilan(mes_ventes, mes_depenses)
+    return {
+        "user": user,
+        "produits": mes_produits,
+        "ventes": mes_ventes,
+        "total_ventes": bilan["chiffre_affaires"],
+        "total_depenses": bilan["total_depenses"],
+        "cout_achat": bilan["cout_achat"],
+        "marge_brute": bilan["marge_brute"],
+        "benefice_net": bilan["benefice_net"],
+        "commandes_tables": crud.get_commandes_ouvertes(db, autorises),
+        "erreur_stock": erreur_stock
+    }
+
 @app.get("/comptoir", response_class=HTMLResponse)
 def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
     user = get_current_user(session_token, db)
@@ -526,24 +571,12 @@ def comptoir_page(request: Request, session_token: Optional[str] = Cookie(None),
     if redir:
         return redir
     autorises = etablissements_autorises(user, db)
-    mes_produits = []
-    for etab_id in autorises:
-        mes_produits.extend(crud.get_produits_by_etablissement(db, etab_id))
-    mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "comptoir")
-    return templates.TemplateResponse(
-        request=request,
-        name="comptoir.html",
-        context={
-            "user": user,
-            "produits": mes_produits,
-            "ventes": mes_ventes,
-            "total_ventes": sum(v.montant for v in mes_ventes),
-            "erreur_stock": None
-        }
-    )
+    return templates.TemplateResponse(request=request, name="comptoir.html", context=_contexte_comptoir(user, db, autorises))
 
 @app.get("/comptoir/vendre_une/{produit_id}")
-def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+def vendre_une_bouteille(request: Request, produit_id: str, table: Optional[str] = None, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    """Vend une bouteille. Si ?table=... est fourni, elle est ajoutée à l'addition de cette table
+    (payée plus tard) ; sinon c'est un encaissement direct."""
     user = get_current_user(session_token, db)
     if not user or user["role"] not in ["gerant_comptoir", "super_admin"]:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
@@ -551,23 +584,22 @@ def vendre_une_bouteille(request: Request, produit_id: str, session_token: Optio
     produit = crud.get_produit_by_id(db, produit_id, autorises)
     if produit:
         if produit.quantite_stock <= 0:
-            mes_produits = []
-            for etab_id in autorises:
-                mes_produits.extend(crud.get_produits_by_etablissement(db, etab_id))
-            mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "comptoir")
             return templates.TemplateResponse(
-                request=request,
-                name="comptoir.html",
-                context={
-                    "user": user,
-                    "produits": mes_produits,
-                    "ventes": mes_ventes,
-                    "total_ventes": sum(v.montant for v in mes_ventes),
-                    "erreur_stock": f"Stock épuisé pour '{produit.nom}' ! Veuillez réapprovisionner."
-                }
+                request=request, name="comptoir.html",
+                context=_contexte_comptoir(user, db, autorises, f"Stock épuisé pour '{produit.nom}' ! Veuillez réapprovisionner.")
             )
+        # Coût d'achat d'UNE bouteille = prix du casier / nombre de bouteilles par casier
+        cout_unitaire = (produit.prix_achat_casier or 0.0) / max(produit.unites_par_casier or 1, 1)
         crud.decrementer_stock(db, produit, 1)
-        crud.enregistrer_vente(db, produit.etablissement_id, "comptoir", produit.nom, produit.prix_vente_bouteille, user["nom_complet"])
+        if table and table.strip():
+            crud.ajouter_articles_a_table(
+                db, produit.etablissement_id, table.strip(), f"1 {produit.nom}",
+                produit.prix_vente_bouteille, user["nom_complet"],
+                montant_comptoir=produit.prix_vente_bouteille, cout_comptoir=cout_unitaire
+            )
+        else:
+            crud.enregistrer_vente(db, produit.etablissement_id, "comptoir", produit.nom,
+                                   produit.prix_vente_bouteille, user["nom_complet"], cout_achat=cout_unitaire)
     return RedirectResponse(url="/comptoir", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/comptoir/ajouter_stock")
@@ -595,9 +627,7 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), 
         mes_menu.extend(crud.get_menu_by_etablissement(db, etab_id))
     mes_ventes = crud.get_ventes_non_cloturees(db, autorises, "cuisine")
     mes_depenses = crud.get_depenses_non_cloturees(db, autorises, "cuisine")
-    commandes_tables = crud.get_commandes_ouvertes(db, autorises)
-    total_v = sum(v.montant for v in mes_ventes)
-    total_d = sum(d.montant for d in mes_depenses)
+    bilan = crud.calculer_bilan(mes_ventes, mes_depenses)
     return templates.TemplateResponse(
         request=request,
         name="cuisine.html",
@@ -606,10 +636,12 @@ def cuisine_page(request: Request, session_token: Optional[str] = Cookie(None), 
             "menu": mes_menu,
             "ventes": mes_ventes,
             "depenses": mes_depenses,
-            "total_ventes": total_v,
-            "total_depenses": total_d,
-            "benefice_net": total_v - total_d,
-            "commandes_tables": commandes_tables
+            "total_ventes": bilan["chiffre_affaires"],
+            "total_depenses": bilan["total_depenses"],
+            "cout_achat": bilan["cout_achat"],
+            "marge_brute": bilan["marge_brute"],
+            "benefice_net": bilan["benefice_net"],
+            "commandes_tables": crud.get_commandes_ouvertes(db, autorises)
         }
     )
 
@@ -653,82 +685,92 @@ async def vendre_combinaison(
 
     return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
 
+ROLES_TABLES = ["cuisinier", "gerant_comptoir", "super_admin"]
+
 @app.get("/cuisine/table/regler/{commande_id}")
 def regler_addition_table(commande_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    """Confirme le paiement de l'addition d'une table (cuisine + comptoir confondus)."""
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+    if not user or user["role"] not in ROLES_TABLES:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     autorises = etablissements_autorises(user, db)
     crud.regler_commande_table(db, commande_id, autorises, user["nom_complet"])
-    return RedirectResponse(url=f"/cuisine/table/facture/{commande_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/cuisine/table/facture/{commande_id}?embed=1", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/cuisine/table/facture/{commande_id}", response_class=HTMLResponse)
-def facture_table(commande_id: str, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+def facture_table(commande_id: str, embed: Optional[str] = None, session_token: Optional[str] = Cookie(None), db: Session = Depends(get_db)):
+    """Facture / addition d'une table, avec QR code Mobile Money (numéro + montant), impression
+    et recherche d'imprimante Bluetooth. S'ouvre dans une fenêtre (modal) depuis cuisine/comptoir."""
     user = get_current_user(session_token, db)
-    if not user or user["role"] not in ["cuisinier", "super_admin"]:
+    if not user or user["role"] not in ROLES_TABLES:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     autorises = etablissements_autorises(user, db)
-    commande = db.query(models.CommandeTable).filter(
-        models.CommandeTable.id == commande_id,
-        models.CommandeTable.etablissement_id.in_(autorises)
-    ).first()
+    commande = crud.get_commande_par_id(db, commande_id, autorises)
     if not commande:
-        return RedirectResponse(url="/cuisine", status_code=status.HTTP_303_SEE_OTHER)
+        return HTMLResponse("<p style='font-family:sans-serif;padding:20px;'>Addition introuvable.</p>", status_code=404)
 
-    import os
+    import os, base64, html
     numero_mobile_money = os.getenv("MOBILE_MONEY_NUMERO", "")
     qr_data = f"Paiement;{numero_mobile_money};{commande.total_montant:.0f} FC"
-
     qr_base64 = None
     try:
         import qrcode
-        import base64
         buf = io.BytesIO()
         qrcode.make(qr_data).save(buf, format="PNG")
         qr_base64 = base64.b64encode(buf.getvalue()).decode()
     except ImportError:
         pass
 
+    articles = "".join(f"<div class='ligne'>• {html.escape(a.strip())}</div>" for a in commande.articles_details.split("|"))
+    statut = ("<div class='payee'>✔ ADDITION PAYÉE</div>" if commande.est_payee
+              else f"<a class='btn btn-pay' href='/cuisine/table/regler/{commande.id}'>CONFIRMER LE PAIEMENT REÇU</a>")
+    qr_html = (f"<img src='data:image/png;base64,{qr_base64}' width='170' alt='QR Mobile Money'>" if qr_base64
+               else "<p style='color:#FF8888;text-align:center;font-size:12px;'>QR code indisponible (installer qrcode[pil])</p>")
+    mm = html.escape(numero_mobile_money) if numero_mobile_money else "numéro non configuré (MOBILE_MONEY_NUMERO)"
+
     return HTMLResponse(f"""
     <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Facture Table {commande.numero_table}</title>
-        <style>
-            body {{ background:#121A21; color:#FFF; font-family: sans-serif; padding:20px; }}
-            .facture {{ background:#1C2732; border-radius:12px; padding:20px; max-width:380px; margin:0 auto; border:1px solid #2A3847; }}
-            .ligne {{ padding:6px 0; border-bottom:1px solid #2A3847; font-size:14px; }}
-            .total {{ font-size:20px; font-weight:900; color:#32D785; text-align:right; margin-top:10px; }}
-            img {{ display:block; margin:16px auto; background:#fff; padding:8px; border-radius:8px; }}
-            button {{ width:100%; padding:12px; margin-top:10px; border:0; border-radius:8px; font-weight:900; cursor:pointer; }}
-            .btn-print {{ background:#0E5C8C; color:#fff; }}
-            .btn-bt {{ background:#1E9E63; color:#fff; }}
-        </style>
-    </head>
+    <html lang="fr"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facture Table {html.escape(commande.numero_table)}</title>
+    <style>
+      body {{ background:#121A21; color:#FFF; font-family:-apple-system,Segoe UI,Roboto,sans-serif; margin:0; padding:14px; }}
+      .facture {{ background:#1C2732; border-radius:12px; padding:18px; max-width:380px; margin:0 auto; border:1px solid #2A3847; }}
+      h2 {{ margin:0 0 4px; }} .sub {{ color:#8E9BAE; font-size:12px; margin-bottom:12px; }}
+      .ligne {{ padding:6px 0; border-bottom:1px solid #2A3847; font-size:14px; }}
+      .total {{ font-size:22px; font-weight:900; color:#32D785; text-align:right; margin:12px 0; }}
+      img {{ display:block; margin:12px auto; background:#fff; padding:8px; border-radius:8px; }}
+      .note {{ font-size:11px; color:#8E9BAE; text-align:center; }}
+      .btn {{ display:block; width:100%; box-sizing:border-box; text-align:center; padding:13px; margin-top:10px; border:0; border-radius:8px; font-weight:900; font-size:13px; cursor:pointer; text-decoration:none; color:#fff; }}
+      .btn-print {{ background:#0E5C8C; }} .btn-bt {{ background:#6B4FBB; }} .btn-pay {{ background:#1E9E63; }}
+      .payee {{ text-align:center; color:#32D785; font-weight:900; padding:12px; border:1px solid #32D785; border-radius:8px; margin-top:10px; }}
+      @media print {{ .noprint {{ display:none !important; }} body {{ background:#fff; color:#000; }} .facture {{ border:0; background:#fff; }} .total {{ color:#000; }} }}
+    </style></head>
     <body>
-        <div class="facture">
-            <h2>Table {commande.numero_table}</h2>
-            <div class="ligne">{commande.articles_details}</div>
-            <div class="total">{commande.total_montant:,.0f} FC</div>
-            {f'<img src="data:image/png;base64,{qr_base64}" width="180">' if qr_base64 else '<p style="color:#FF8888;text-align:center;">QR code indisponible (pip install qrcode[pil])</p>'}
-            <p style="font-size:11px;color:#8E9BAE;text-align:center;">Scanner pour payer par Mobile Money : {numero_mobile_money or 'numéro non configuré (MOBILE_MONEY_NUMERO)'}</p>
-            <button class="btn-print" onclick="window.print()">IMPRIMER</button>
-            <button class="btn-bt" onclick="chercherImprimante()">RECHERCHER UNE IMPRIMANTE BLUETOOTH</button>
+      <div class="facture">
+        <h2>Table {html.escape(commande.numero_table)}</h2>
+        <div class="sub">Ouverte à {commande.date_creation.strftime('%H:%M') if commande.date_creation else '--'} · {html.escape(commande.gerant_nom)}</div>
+        {articles}
+        <div class="total">TOTAL : {commande.total_montant:,.0f} FC</div>
+        {qr_html}
+        <p class="note">Scanner pour payer par Mobile Money<br><b>{mm}</b></p>
+        <div class="noprint">
+          <button class="btn btn-print" onclick="window.print()">🖨️ IMPRIMER</button>
+          <button class="btn btn-bt" onclick="chercherImprimante()">📶 CHERCHER UNE IMPRIMANTE BLUETOOTH</button>
+          {statut}
         </div>
-        <script>
+      </div>
+      <script>
         async function chercherImprimante() {{
-            try {{
-                const device = await navigator.bluetooth.requestDevice({{ acceptAllDevices: true }});
-                alert("Imprimante trouvée : " + device.name + "\\n(Connexion et impression ESC/POS à configurer selon le modèle exact.)");
-            }} catch (e) {{
-                alert("Recherche annulée ou Bluetooth indisponible sur cet appareil : " + e);
-            }}
+          try {{
+            const device = await navigator.bluetooth.requestDevice({{ acceptAllDevices: true }});
+            alert("Imprimante trouvée : " + device.name + "\\nL'impression ESC/POS dépend du modèle exact.");
+          }} catch (e) {{
+            alert("Recherche annulée ou Bluetooth indisponible : " + e);
+          }}
         }}
-        </script>
-    </body>
-    </html>
+      </script>
+    </body></html>
     """)
 
 @app.post("/cuisine/menu/ajouter")
